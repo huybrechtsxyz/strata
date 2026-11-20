@@ -67,7 +67,7 @@ class Diagnostic:
 
     hint: str | None = None
     """What to do about it, when that is known: one short imperative sentence, separate from the `message` that
-    says what is wrong (docs/work/diagnostic-guidance.md, design question 1). Rendered under the finding on the
+    says what is wrong (docs/design/diagnostic-guidance.md). Rendered under the finding on the
     console and as `hint` in JSON. Optional: most findings carry their fix in the message today."""
 
     def __str__(self) -> str:

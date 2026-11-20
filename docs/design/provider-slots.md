@@ -137,8 +137,8 @@ and `prd-north-deployment` extending it. `strata build run` renders `strata.prov
 
 - Patching fields of a bound provider, and environment-level overrides (`environment.spec.overrides`).
   Per-deployment values belong in environments.
-- Rebinding other workspace content (resources, modules) — tracked in
-  `workspace-overrides.md` (work doc), which reuses this pattern. Assets
+- Rebinding other workspace content (resources, modules) — not covered yet; see
+  [workspace-overrides.md](workspace-overrides.md), whose rule a new category follows. Assets
   already do: see [asset-management.md](asset-management.md).
 
 ## Related Decisions

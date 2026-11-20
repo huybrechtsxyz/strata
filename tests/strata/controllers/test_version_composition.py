@@ -209,7 +209,7 @@ def test_two_listed_documents_pinning_one_target_is_a_conflict_even_with_equal_v
     ],
 )
 def test_every_version_finding_says_what_to_do(tmp_path: Path, change, code):
-    """docs/work/diagnostic-guidance.md: each new finding carries a `hint`, separate from its message."""
+    """docs/design/diagnostic-guidance.md: each new finding carries a `hint`, separate from its message."""
     root = _solution(tmp_path)
     change(root)
 

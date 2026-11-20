@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""The deployment manifest — `_manifest.json` (docs/work/audit-trail.md's "The audit files").
+"""The deployment manifest — `_manifest.json` (docs/design/audit-trail.md's "The audit files").
 
-Phase 2 of that doc's Layer 2 Implementation Plan. This is a **written
+This is a **written
 artifact**, not a discoverable `(kind, meta.name)` document — `.strata/`
 (where it lives, via `layout.audit_dir()`) is permanently excluded from
 solution discovery (`layout.DEFAULT_IGNORED_DIRS`), so this model carries
@@ -16,7 +16,7 @@ shape, not just the docs:
 - `artifacts.platform` is a **reference** (`hash` + `path`), never an embed —
   v1's `ManifestPlatformModel.content: dict | None` (the full embedded
   `platform.json`) is dropped. Keeps every satellite artifact
-  (platform/sbom/outputs) the same shape: a hash the manifest vouches for,
+  (platform, sbom) the same shape: a hash the manifest vouches for,
   a path a reader follows.
 - No persisted `_event.json` — `render_manifest_event()`/
   `render_metrics_event()` (`controllers/audit_event_rendering.py`) compute
@@ -43,7 +43,7 @@ class ChangeReferenceModel(PlatformBaseModel):
     (`DeploymentManifestModel`, who *ran* the deploy) and `supplied_by`
     (who *typed* this reference — usually the same actor, auto-derived
     from `resolve_actor()`) both already existed; `approved_by`/
-    `approved_at` close the real gap docs/work/audit-trail.md's
+    `approved_at` close the real gap docs/design/audit-trail.md's
     compliance analysis flagged for Q3 ("who approved") — self-attestation
     by the executor is not independent authorization under ISO 27001
     A.12.1.2. **Honesty limit, stated directly rather than implied:**
@@ -90,22 +90,15 @@ class ChangeReferenceModel(PlatformBaseModel):
         return self
 
 
-class ManifestPullRequestModel(PlatformBaseModel):
-    """PR evidence, extracted by a future `gh`-based enrichment step (Layer 1's
-    unbuilt half) — modeled now so the manifest shape is stable ahead of it.
-    """
+class ManifestPipelineModel(PlatformBaseModel):
+    """The CI run that did the deploy (`strata.utils.ci_run`). Its log holds the full output."""
 
-    number: int = Field(description="PR number")
-    title: str | None = Field(default=None, description="PR title at extraction time")
-    url: str | None = Field(default=None, description="Link to the PR")
-    author: str | None = Field(default=None, description="PR author")
-    merged_by: str | None = Field(default=None, description="Who merged the PR")
-    merged_at: str | None = Field(default=None, description="ISO-8601 merge timestamp")
-    labels: list[str] | None = Field(default=None, description="PR labels at extraction time")
-    files_changed: int | None = Field(default=None, description="Number of files changed in the PR")
-    approvers: list[str] | None = Field(
-        default=None, description="Reviewers who approved — modeled but not populated by the current extraction"
-    )
+    system: Literal["azure_devops", "github_actions"] = Field(description="Which CI system ran the deploy")
+    run_id: str = Field(description="The run's id: Build.BuildId or GITHUB_RUN_ID")
+    run_number: str | None = Field(default=None, description="The run's display number: Build.BuildNumber")
+    pipeline: str | None = Field(default=None, description="Pipeline or workflow name")
+    branch: str | None = Field(default=None, description="The branch or ref the run was queued for")
+    url: str | None = Field(default=None, description="Link to the run")
 
 
 class ManifestPlatformReferenceModel(PlatformBaseModel):
@@ -121,6 +114,11 @@ class ManifestRepositoryModel(PlatformBaseModel):
     url: str | None = Field(default=None, description="Git remote URL")
     ref: str | None = Field(default=None, description="Requested git ref (tag, branch, or commit)")
     commit: str | None = Field(default=None, description="Resolved full commit SHA")
+    dirty: bool | None = Field(
+        default=None,
+        description="Whether the files the build took from this repository had uncommitted changes, as the build "
+        "recorded it in resolved.yaml; left out when unknown",
+    )
 
 
 class ManifestImageModel(PlatformBaseModel):
@@ -171,27 +169,20 @@ class ManifestArtifactsModel(PlatformBaseModel):
 
 
 class ManifestStepModel(PlatformBaseModel):
-    """One step within a stage — deploy-log's richer per-step shape, kept over the
-    manifest's own coarser (names-only) `steps[]`."""
+    """One phase of a stage: `setup`, `check`, `plan`, `apply` or `destroy`, the names a deployment stage's
+    `timeouts` use."""
 
-    step: str = Field(description="Step name, e.g. 'init', 'plan', 'apply'")
-    success: bool = Field(description="Whether this step succeeded")
+    step: str = Field(description="Phase name: 'setup', 'check', 'plan', 'apply' or 'destroy'")
+    success: bool = Field(description="Whether this phase succeeded")
     duration_seconds: float | None = Field(default=None, description="Wall-clock duration in seconds")
 
 
-class ManifestOutputsReferenceModel(PlatformBaseModel):
-    """Reference to a durable outputs artifact — path + hash, never embedded values."""
-
-    path: str = Field(description="Relative path to the outputs artifact JSON file")
-    sha256: str = Field(description="SHA-256 hash of the outputs artifact")
-
-
 class ManifestStageModel(PlatformBaseModel):
-    """Result of a single deployment stage execution."""
+    """One provisioning step of the run (docs/design/audit-trail.md, "Stages"). No output values: those stay in
+    the workspace's `output_store`, out of a file sent to every sink."""
 
-    name: PlatformName = Field(description="Stage name")
+    name: PlatformName = Field(description="Provisioning step name")
     provisioner: str | None = Field(default=None, description="Provisioner used")
-    topology: str | None = Field(default=None, description="Topology name, if topology-based")
     status: Literal["success", "failed", "skipped"] = Field(description="Stage outcome")
     skip_reason: str | None = Field(
         default=None, description="Why the stage was skipped — set only when status is 'skipped'"
@@ -199,11 +190,7 @@ class ManifestStageModel(PlatformBaseModel):
     started_at: str | None = Field(default=None, description="ISO-8601 start timestamp")
     completed_at: str | None = Field(default=None, description="ISO-8601 completion timestamp")
     duration_seconds: float | None = Field(default=None, description="Wall-clock duration in seconds")
-    steps: list[ManifestStepModel] | None = Field(default=None, description="Per-step outcome and timing")
-    outputs: dict[str, Any] | None = Field(default=None, description="Non-sensitive outputs collected from the stage")
-    outputs_artifact: ManifestOutputsReferenceModel | None = Field(
-        default=None, description="Reference to the durable outputs artifact for this stage"
-    )
+    steps: list[ManifestStepModel] | None = Field(default=None, description="Per-phase outcome and timing")
     errors: list[str] | None = Field(default=None, description="Error messages if the stage failed")
     warnings: list[str] | None = Field(default=None, description="Non-fatal warnings recorded for this stage")
     messages: list[str] | None = Field(default=None, description="Informational messages recorded for this stage")
@@ -255,7 +242,10 @@ class DeploymentManifestModel(PlatformBaseModel):
     deployment: PlatformName = Field(description="Deployment document name")
     workspace: PlatformName = Field(description="Workspace document name")
     environment: str | None = Field(default=None, description="Environment label")
-    file: str | None = Field(default=None, description="Path to the deployment file used, if applicable")
+    file: str | None = Field(
+        default=None,
+        description="The deployment document's file, relative to the solution root (absolute when it lives elsewhere)",
+    )
 
     # Timing — started_at fixed at the top of the run, never changes once set
     started_at: str = Field(description="ISO-8601 timestamp when the run started")
@@ -265,19 +255,36 @@ class DeploymentManifestModel(PlatformBaseModel):
     # Outcome — tri-state, not a bare bool: 'partial' is real signal a bool can't carry
     status: Literal["success", "partial", "failed"] = Field(description="Overall outcome")
 
-    # Flags
-    force: bool = Field(default=False, description="Whether --force was passed")
+    # Flags. No `force`: `deploy run --force` has no effect.
     dry_run: bool = Field(default=False, description="Whether this was a dry run")
 
-    # Actor + git context — actor kept distinct from commit_author (who wrote the code
-    # is not who ran the deploy)
-    deployed_by: str | None = Field(default=None, description="Resolved actor identity")
-    commit_sha: str | None = Field(default=None, description="Git commit SHA at deploy time")
-    commit_message: str | None = Field(default=None, description="Git commit message")
-    commit_author: str | None = Field(default=None, description="Git commit author")
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_legacy_force(cls, data: Any) -> Any:
+        """A manifest written before `force` was removed holds `force: false` (it defaulted to `False`, so
+        `exclude_none` kept it).
+        It is dropped on read, so `strata audit status` and `changes` still list those records."""
+        if isinstance(data, dict) and "force" in data:
+            return {key: value for key, value in data.items() if key != "force"}
+        return data
 
-    # Layer 1 evidence
-    pull_request: ManifestPullRequestModel | None = Field(default=None, description="PR evidence, when extracted")
+    # Actor + git context. No commit author or message: the deployed HEAD is often not the commit that made the
+    # change, so they would name the wrong person; `git show <commit_sha>` has both.
+    deployed_by: str | None = Field(default=None, description="Resolved actor identity")
+    commit_sha: str | None = Field(
+        default=None,
+        description="Git commit SHA of the solution: the build's record in resolved.yaml, else read at deploy time",
+    )
+    commit_dirty: bool | None = Field(
+        default=None,
+        description="Whether the solution had uncommitted changes when it was built; left out when unknown",
+    )
+
+    pipeline: ManifestPipelineModel | None = Field(
+        default=None, description="The CI run that did the deploy; left out for a run outside CI"
+    )
+
+    # No pull request: deploys are not PR-triggered, and the deployed HEAD is often not a PR's merge commit.
     change_reference: ChangeReferenceModel | None = Field(
         default=None, description="External change/ticket record, when supplied"
     )
@@ -289,18 +296,15 @@ class DeploymentManifestModel(PlatformBaseModel):
     stages: list[ManifestStageModel] | None = Field(default=None, description="Results of each deployment stage")
 
     # Satellite references — reference-only pattern, applied consistently
+    # No `outputs` (step outputs go to the workspace's output store, not a file) and no `signatures` (nothing signs).
     sbom: ManifestSbomReferenceModel | None = Field(default=None, description="Reference to the generated SBOM")
-    outputs: ManifestOutputsReferenceModel | None = Field(
-        default=None, description="Reference to the run's durable outputs artifact"
-    )
-    signatures: dict[str, Any] | None = Field(default=None, description="Signing/attestation data, when configured")
     policy_results: list[ManifestPolicyResultModel] | None = Field(
         default=None, description="Policy evaluation results from all phases run during this deployment"
     )
     # lock: ManifestLockReferenceModel | None = Field(default=None, description="State lock audit trail")
     # — commented out alongside the class above; same reactivation plan.
 
-    # Catch-alls
+    # The run's own findings, by severity
     errors: list[str] | None = Field(default=None, description="Run-level error messages")
+    warnings: list[str] | None = Field(default=None, description="Run-level warnings")
     messages: list[str] | None = Field(default=None, description="Run-level informational messages")
-    metadata: dict[str, Any] | None = Field(default=None, description="Free-form additional data")

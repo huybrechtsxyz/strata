@@ -278,7 +278,7 @@ existing opt-out rule.
 
 A deployment rebinds a slot with `spec.assets: [{slot, asset}]`
 (`DeploymentAssetBindingModel`), the rule provider slots already set
-([provider-slots.md](provider-slots.md), workspace-overrides (work doc `workspace-overrides.md`)):
+([provider-slots.md](provider-slots.md), [workspace-overrides.md](workspace-overrides.md)):
 the workspace declares slots with defaults, the deployment rebinds by name,
 **rebind only** (no field patching; use `{name}` templating for a variant inside
 one repository, a different document for a different structure), and reuse goes
@@ -419,7 +419,7 @@ deployment, against the assets its workspace steps select.
 
 - **Rebinding resources or modules**, and field patching of a bound asset —
   rebind only, as for providers; see
-  `workspace-overrides.md` (work doc).
+  [workspace-overrides.md](workspace-overrides.md).
 - **Asset locations other than git** (OCI, Helm): `resolve_remote()` fetches only git.
 - **Per-customer templating of credential key references** — not built; a distinct identity
   is one integration document each, until there is evidence that is too many.
@@ -443,7 +443,7 @@ deployment, against the assets its workspace steps select.
   `WorkspaceSpecModel`'s pool-of-names pattern, the base the slots extend.
 - [provider-slots.md](provider-slots.md) — the slot-and-rebind rule asset slots reuse:
   `effective_*()`, the merge-key table, the shorthand schema helper, the validation shape.
-- `workspace-overrides.md` (work doc) — why rebinding lives on the
+- [workspace-overrides.md](workspace-overrides.md) — why rebinding lives on the
   deployment, and the rule shared by every category.
 - `remotes-at-scale.md` (removed work doc; its open items are GitHub issues) — the 300-customer premise behind
   `location`.
@@ -453,7 +453,7 @@ deployment, against the assets its workspace steps select.
 - [ADR-0018](../decisions/0018-source-model-unified-remote-reference.md) —
   `SourceModel`'s field shape, reused here.
 - [ADR-0022](../decisions/0022-strata-build-run.md) /
-  `build-command.md` (work doc) — the build pipeline this
+  [build-command.md](build-command.md) — the build pipeline this
   plugs into (`sync_source()`, the step loop).
 - [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md) —
   why assets are copied byte-for-byte, never templated, and why the
@@ -474,7 +474,7 @@ deployment, against the assets its workspace steps select.
   therefore not the right tool for a build-time file copy.
 - [path-conventions.md](path-conventions.md) — `compile_pattern()`'s
   `{name}` token syntax, reused here for filling rather than matching.
-- `remotes.md` (work doc) — `resolve_remote()`, the prerequisite
+- [remotes.md](remotes.md) — `resolve_remote()`, the prerequisite
   this design reuses unchanged.
 - [ADR-0035](../decisions/0035-unified-terraform-projection.md) /
   [unified-terraform-projection.md](unified-terraform-projection.md) —

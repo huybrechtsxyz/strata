@@ -17,9 +17,19 @@ _EXTENDS_CONTROL_FIELDS = ("partial", "extends")
 #: (docs/design/provider-slots.md, docs/design/asset-management.md). Not listed -> replaced wholesale.
 LIST_MERGE_KEYS = {"stages": "step", "providers": "slot", "assets": "slot"}
 
+#: Keyed lists inside an item of a keyed list, merged the same way when two items merge: a stage's
+#: `health_checks` by `name`. Not listed -> replaced wholesale, as `deep_merge` does.
+NESTED_LIST_MERGE_KEYS: dict[str, dict[str, str]] = {"stages": {"health_checks": "name"}}
 
-def _merge_keyed_list(base: list[dict[str, Any]], child: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
-    """Base items first; a child item with the same `key` deep-merges over it, new keys append."""
+#: Name lists that append base-first, each name once, like `environments`.
+APPEND_LISTS = ("environments", "configurations")
+
+
+def _merge_keyed_list(
+    base: list[dict[str, Any]], child: list[dict[str, Any]], key: str, nested: dict[str, str] | None = None
+) -> list[dict[str, Any]]:
+    """Base items first; a child item with the same `key` deep-merges over it, new keys append. A `nested` list
+    in both items (field -> key) is merged by its own key instead of being replaced."""
     by_key: dict[Any, dict[str, Any]] = {}
     order: list[Any] = []
     for item in [*base, *child]:
@@ -27,7 +37,12 @@ def _merge_keyed_list(base: list[dict[str, Any]], child: list[dict[str, Any]], k
         if identity is None:
             identity = object()  # a keyless item is never merged into another
         if identity in by_key:
-            by_key[identity] = deep_merge(by_key[identity], item)
+            earlier = by_key[identity]
+            merged = deep_merge(earlier, item)
+            for field, field_key in (nested or {}).items():
+                if earlier.get(field) and item.get(field):
+                    merged[field] = _merge_keyed_list(earlier[field], item[field], field_key)
+            by_key[identity] = merged
         else:
             by_key[identity] = dict(item)
             order.append(identity)
@@ -61,9 +76,12 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
     - **Keyed lists** (`LIST_MERGE_KEYS`: `stages` by `step`, `providers` and `assets` by
       `slot`) — a child item with the same key overrides the base's
       field-by-field; new keys are appended. Same "later wins per key" rule
-      environments already use for variables/secrets/features.
-    - **`environments`** — base list first, then the child's. Later entries
-      win at value-resolution time, so the child still takes precedence.
+      environments already use for variables/secrets/features. Inside a
+      merged stage, `health_checks` merge by `name` the same way
+      (`NESTED_LIST_MERGE_KEYS`).
+    - **`environments`, `configurations`** (`APPEND_LISTS`) — base list first,
+      then the child's names it lacks. Later environments win at
+      value-resolution time, so the child still takes precedence.
     - **`version`** — base list first, then the child's, each document once
       (docs/design/version-composition.md V2): a shared `prd-core` in a base
       plus the product's own `prd-datahub` gives both. A single name on
@@ -84,12 +102,13 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
         base_items = base.get(field) or []
         child_items = child.get(field) or []
         if base_items or child_items:
-            merged[field] = _merge_keyed_list(base_items, child_items, key)
+            merged[field] = _merge_keyed_list(base_items, child_items, key, NESTED_LIST_MERGE_KEYS.get(field))
 
-    base_envs = base.get("environments") or []
-    child_envs = child.get("environments") or []
-    if base_envs or child_envs:
-        merged["environments"] = [*base_envs, *[e for e in child_envs if e not in base_envs]]
+    for field in APPEND_LISTS:
+        base_names = base.get(field) or []
+        child_names = child.get(field) or []
+        if base_names or child_names:
+            merged[field] = [*base_names, *[name for name in child_names if name not in base_names]]
 
     # docs/design/version-composition.md V2: version lists append base-first, a repeat dropped silently. A single
     # name on either side counts as a one-element list; one name in the result stays a plain name.

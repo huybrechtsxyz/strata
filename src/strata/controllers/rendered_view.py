@@ -42,7 +42,7 @@ from strata.models.common_models import PlatformKind
 from strata.models.deployment_model import DeploymentSpecModel, DeploymentTemplateModel
 from strata.models.template_model import DocumentTemplateModel
 from strata.models.tenant_model import TenantModel
-from strata.services.deployment_service import LIST_MERGE_KEYS
+from strata.services.deployment_service import LIST_MERGE_KEYS, NESTED_LIST_MERGE_KEYS
 from strata.services.environment_service import STORE_MERGE_KEYS
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.param_tokens import ParamOrigin, merge_param_values, substitute_params
@@ -51,7 +51,11 @@ from strata.utils.param_tokens import ParamOrigin, merge_param_values, substitut
 RENDERABLE_KINDS = (PlatformKind.DEPLOYMENT, PlatformKind.ENVIRONMENT, PlatformKind.TENANT)
 
 #: Each list of named items and the field that names its items: the lists the merges merge by name.
-_KEYED_LISTS: dict[str, str] = {**LIST_MERGE_KEYS, **STORE_MERGE_KEYS}
+_KEYED_LISTS: dict[str, str] = {
+    **LIST_MERGE_KEYS,
+    **STORE_MERGE_KEYS,
+    **{field: key for nested in NESTED_LIST_MERGE_KEYS.values() for field, key in nested.items()},
+}
 
 #: What a masked secret value is rendered as: the same mask as `deploy report`.
 SECRET_MASK = MASK

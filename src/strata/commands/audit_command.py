@@ -52,9 +52,9 @@ def status_command(deployment: str | None, path: Path | None, output: str, quiet
 
     Reads from the solution's configured 'git' audit sink
     (spec.audit.sinks[].git) — never local files, since most real
-    deployments run in ephemeral CI (docs/work/audit-trail.md's "Layer 3
-    deferred"). Fails fast, before any network access, if no readable sink
-    is configured, or if more than one is (only one is supported so far).
+    deployments run in ephemeral CI (docs/design/audit-commands.md). Fails
+    fast, before any network access, if no readable sink is configured, or
+    if more than one is (only one is supported so far).
 
     DEPLOYMENT with no records yet is not an error — the sink is reachable,
     there is just nothing recorded for it.
@@ -98,7 +98,7 @@ def _print_status_table(records: list[DeploymentStatusRecord]) -> None:
     headers = ("DEPLOYMENT", "ACTION", "STATUS", "VERSION", "DEPLOYED BY", "COMPLETED AT")
     deployment_w = max(len(headers[0]), max(len(r.deployment) for r in records))
     action_w = max(len(headers[1]), max(len(r.action) for r in records))
-    status_w = max(len(headers[2]), max(len(r.status) for r in records))
+    status_w = max(len(headers[2]), max(len(_status_cell(r)) for r in records))
     version_w = max(len(headers[3]), max(len(r.version) for r in records))
     deployed_by_w = max(len(headers[4]), max(len(r.deployed_by) for r in records))
     completed_at_w = max(len(headers[5]), max(len(r.completed_at) for r in records))
@@ -114,7 +114,7 @@ def _print_status_table(records: list[DeploymentStatusRecord]) -> None:
         )
         click.echo(
             f"  {record.deployment.ljust(deployment_w)}  {record.action.ljust(action_w)}  "
-            f"{record.status.ljust(status_w)}  {record.version.ljust(version_w)}  "
+            f"{_status_cell(record).ljust(status_w)}  {record.version.ljust(version_w)}  "
             f"{record.deployed_by.ljust(deployed_by_w)}  {record.completed_at.ljust(completed_at_w)}  {change_ref}"
         )
 
@@ -135,8 +135,14 @@ def _to_json(record: DeploymentStatusRecord) -> dict[str, Any]:
         "deployed_by": record.deployed_by,
         "completed_at": record.completed_at,
         "commit_sha": record.commit_sha,
+        "failed_step": record.failed_step,
         "change_reference": record.change_reference.model_dump(exclude_none=True) if record.change_reference else None,
     }
+
+
+def _status_cell(record: DeploymentStatusRecord | DeploymentChangeRecord) -> str:
+    """The status, naming the step a failed or partial run stopped at: `partial (apply_apps)`."""
+    return f"{record.status} ({record.failed_step})" if record.failed_step else record.status
 
 
 @audit_command.command("changes")
@@ -184,7 +190,7 @@ def changes_command(
 
     Reads from the solution's configured 'git' audit sink, same as
     'audit status' — never local files, since most real deployments run in
-    ephemeral CI (docs/work/audit-trail.md's "Layer 3 deferred"). Fails
+    ephemeral CI (docs/design/audit-commands.md). Fails
     fast, before any network access, if --since/--until is malformed, or if
     no/multiple readable audit sinks are configured.
 
@@ -240,7 +246,7 @@ def _print_changes_table(records: list[DeploymentChangeRecord]) -> None:
     headers = ("DEPLOYMENT", "ACTION", "STATUS", "STARTED AT")
     deployment_w = max(len(headers[0]), max(len(r.deployment) for r in records))
     action_w = max(len(headers[1]), max(len(r.action) for r in records))
-    status_w = max(len(headers[2]), max(len(r.status) for r in records))
+    status_w = max(len(headers[2]), max(len(_status_cell(r)) for r in records))
     started_at_w = max(len(headers[3]), max(len(r.started_at) for r in records))
 
     click.echo(
@@ -250,7 +256,7 @@ def _print_changes_table(records: list[DeploymentChangeRecord]) -> None:
     for record in records:
         click.echo(
             f"  {record.deployment.ljust(deployment_w)}  {record.action.ljust(action_w)}  "
-            f"{record.status.ljust(status_w)}  {record.started_at.ljust(started_at_w)}  {record.execution_id}"
+            f"{_status_cell(record).ljust(status_w)}  {record.started_at.ljust(started_at_w)}  {record.execution_id}"
         )
 
 
@@ -272,5 +278,6 @@ def _change_to_json(record: DeploymentChangeRecord) -> dict[str, Any]:
         "deployed_by": record.deployed_by,
         "version": record.version,
         "commit_sha": record.commit_sha,
+        "failed_step": record.failed_step,
         "change_reference": record.change_reference.model_dump(exclude_none=True) if record.change_reference else None,
     }

@@ -315,6 +315,14 @@ and `audit_push.py`'s own audit-push checkouts, so none can collide.
 fresh checkout, no write) — all three share one `_commit_and_push()` tail
 and one `_validate_remote()` guard.
 
+**A `path` remote** ([remote-commit-provenance.md](remote-commit-provenance.md), "Writing to a path remote") skips all
+three: the checkout is the pipeline's, so it is never cloned, fetched or
+reset. `BaseGitOpsIntegration` writes `output_file` there and calls
+`commit_in_checkout()`, which commits only that file and pushes to
+`gitops.branch` with a rebase and retry. The audit sink on a `path` remote
+uses the same function. `gitops.action` (`push | commit | none`) stops
+earlier.
+
 ### The Integration class(es)
 
 One shared base (`BaseGitOpsIntegration`) implementing `InfraIntegration`
@@ -363,6 +371,12 @@ on-disk build directory — which (unlike process memory) survives between
 the separate `build run`/`deploy run` CLI invocations; `plan`/`deploy`/
 `destroy`/`output` read it back from there alone.
 
+**Where the checkout is comes from the deploy, not the sidecar.** The sidecar also records the solution root
+the build ran in, but a build output is often carried to a deploy elsewhere: another pipeline stage, another
+agent, another workspace folder. A path remote's checkout and strata's own clone are therefore found under the
+deploying solution's root: `deploy_run()` sets `BaseGitOpsIntegration.solution_root` to it, the same place it
+resolves `auth`. The recorded root is only a fallback for a direct caller that sets none.
+
 **Authentication is resolved fresh at `deploy run` time, never persisted.**
 Unlike `remote`/`output_file` (routing, resolved at build time and carried
 via the sidecar), `authentication` (secrets) is resolved directly inside
@@ -394,9 +408,8 @@ deploy-time-only" (ADR-0022 D4).
   `InfraIntegration` capability split this design's classes implement.
 - [ADR-0023](../decisions/0023-build-output-rendering.md) D3 — `output.
   template`/`default_output()`, reused here unchanged.
-- `remotes.md` (work doc) — `resolve_remote()`'s
-  current pull-only scope; this design's `push_file()` is the first
-  push-direction primitive.
+- [remotes.md](remotes.md) — `resolve_remote()`, which reads remotes;
+  this design's `push_file()` was the first primitive that writes to one.
 - [docs/design/deploy-command.md](deploy-command.md) — cross-step
   outputs, whose `collect_step_outputs()` this design's `output()` method
   stays compatible with.
@@ -449,6 +462,11 @@ deploy-time-only" (ADR-0022 D4).
   deliberately *not* persisted and is instead resolved fresh inside
   `deploy_controller.py`'s per-step loop at actual deploy time, matching
   ADR-0022 D4 ("secrets are deploy-time-only").
+- **The sidecar's solution root was first also used at deploy time**, so a build output carried to a deploy in
+  another folder (a separate stage on a self-hosted agent, say) looked for a path remote's checkout, or created
+  strata's own clone, under the build's folder. Found in a branch review; the deploy now sets the root
+  (`solution_root`), and passing it through every `plan`/`deploy`/`output` call was rejected because Terraform,
+  Helm and Compose do not accept unknown keyword arguments.
 - **A real regression was caught on review before shipping**:
   unconditionally passing `auth=`/`resolved_values=` into every step's
   `output()` call would have silently broken every Terraform deployment's

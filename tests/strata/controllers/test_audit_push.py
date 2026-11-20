@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for `audit_push.push_audit_files` (docs/work/audit-trail.md's
-"Durable push destination"/"The endpoints").
+"""Tests for `audit_push.push_audit_files` (docs/design/audit-trail.md's
+"The git sink").
 
-Phase 4 of that doc's Layer 2 Implementation Plan. Most tests mock
+Most tests mock
 `run_command` (matching `test_remote_resolution.py`'s own established
 style); one true end-to-end test drives a real local bare git repository,
 confirming the whole clone/fetch/reset/add/commit/push chain actually
@@ -89,14 +89,16 @@ def test_non_git_remote_type_fails(tmp_path: Path, monkeypatch):
     assert captured == []
 
 
-def test_path_remote_fails_without_running_any_command(tmp_path: Path, monkeypatch):
-    """A path remote is read where a pipeline put it; strata never pushes to it."""
+def test_path_remote_that_is_not_a_checkout_fails_without_running_any_command(tmp_path: Path, monkeypatch):
+    """A path remote is written in the pipeline's own checkout (test_audit_push_path_remote.py); a folder that is
+    not one is refused before any write."""
     captured = _capture(monkeypatch)
     remote = SolutionRemoteModel(name="xyz-configuration", type=RemoteType.GIT, url="https://h/x.git", path="repos/x")
     result = push_audit_files(tmp_path, _sink(), _solution([remote]), {}, Path("p"), "actor")
     assert result.success is False
-    assert "has a 'path'" in result.detail
+    assert "not a git checkout" in result.detail
     assert captured == []
+    assert not (tmp_path / "repos").exists()
 
 
 def test_no_solution_fails_cleanly(tmp_path: Path, monkeypatch):

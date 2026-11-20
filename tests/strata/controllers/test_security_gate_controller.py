@@ -693,3 +693,34 @@ def test_the_gate_labels_a_declared_only_image():
     assert _image_label(dataclasses.replace(declared, delivered=False)) == (
         "ghcr.io/goauthentik/server:2026.5.2 (declared only)"
     )
+
+
+@pytest.mark.parametrize(
+    ("gate", "mode", "severity", "advice"),
+    [
+        ("release_gate", "block", "error", "release_gate_policy.on_missing_data to 'warn'"),
+        ("image_gate", "warn", "warning", "image_gate_policy.on_missing_data at 'block'"),
+    ],
+)
+def test_a_gate_that_cannot_evaluate_says_what_to_do(gate, mode, severity, advice):
+    """docs/design/diagnostic-guidance.md: the same hint rule as the CVE and Checkov gates."""
+    from strata.controllers.security_gate_controller import _report_missing_data
+    from strata.utils.diagnostics import Diagnostics
+
+    diagnostics = Diagnostics()
+    _report_missing_data(diagnostics, gate, mode, "no sbom.json")
+
+    [finding] = diagnostics.items
+    assert (finding.severity.value, finding.code) == (severity, f"{gate}_missing_data")
+    assert finding.hint is not None and advice in finding.hint
+
+
+def test_a_skipped_gate_leaves_a_trace_without_advice():
+    from strata.controllers.security_gate_controller import _report_missing_data
+    from strata.utils.diagnostics import Diagnostics
+
+    diagnostics = Diagnostics()
+    _report_missing_data(diagnostics, "image_gate", "skip", "no sbom.json")
+
+    [finding] = diagnostics.items
+    assert (finding.severity.value, finding.hint) == ("info", None)

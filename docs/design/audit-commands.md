@@ -6,7 +6,7 @@
 
 ## Overview
 
-This is Layer 3 of the work doc `audit-trail.md`'s four-layer model — the
+This is Layer 3 of [audit-trail.md](audit-trail.md)'s four-layer model — the
 one piece that doc's own MoSCoW records as genuinely missing: a way to read
 back what Layer 2 already writes and Layer 4 already pushes out, so a human
 or an auditor can ask "what deployed, and when" without knowing the on-disk
@@ -79,15 +79,19 @@ every other command does. **No `--sink` flag in this first cut** — see
 
 ```console
 $ strata audit status
-DEPLOYMENT        ACTION   STATUS   VERSION  DEPLOYED BY        COMPLETED AT          CHANGE REF
-web-frontend      deploy   success  2.4.1    svc-pipeline-ado   2026-10-05T14:02:11Z  OPS-1234
-api-backend       deploy   failed   2.4.1    svc-pipeline-ado   2026-10-05T13:47:02Z  -
-db-migrations     destroy  success  2.3.0    jsmith             2026-10-04T09:12:55Z  -
+DEPLOYMENT        ACTION   STATUS                VERSION  DEPLOYED BY        COMPLETED AT          CHANGE REF
+web-frontend      deploy   success               2.4.1    svc-pipeline-ado   2026-10-05T14:02:11Z  OPS-1234
+api-backend       deploy   partial (apply_apps)  2.4.1    svc-pipeline-ado   2026-10-05T13:47:02Z  -
+db-migrations     destroy  success               2.3.0    jsmith             2026-10-04T09:12:55Z  -
 
 $ strata audit status api-backend
-DEPLOYMENT    ACTION  STATUS   VERSION  DEPLOYED BY       COMPLETED AT          CHANGE REF
-api-backend   deploy  failed   2.4.1    svc-pipeline-ado  2026-10-05T13:47:02Z  -
+DEPLOYMENT    ACTION  STATUS                VERSION  DEPLOYED BY       COMPLETED AT          CHANGE REF
+api-backend   deploy  partial (apply_apps)  2.4.1    svc-pipeline-ado  2026-10-05T13:47:02Z  -
 ```
+
+A failed or partial run names the step it stopped at, its first failed stage ([audit-trail.md](audit-trail.md),
+"Stages"), in the status cell and as `failed_step` in JSON; `audit changes` does the same. A record written before
+stages were shows the status alone.
 
 `changes` is now fully designed (not merely deferred) — see "`strata audit
 changes` — range listing" below for its own command surface, filter
@@ -199,7 +203,7 @@ audit changes` instead):
   solution. Reading audit records ('strata audit status'/'strata audit
   changes') requires a configured 'git' audit sink, and none exists —
   add one under spec.audit.sinks in your Configuration document. See
-  docs/work/audit-trail.md and docs/design/audit-commands.md."*
+  docs/design/audit-trail.md and docs/design/audit-commands.md."*
 - More than one: *"Multiple git audit sinks are configured
   ('compliance-archive', 'team-mirror') — reading more than one is not
   supported yet. See docs/design/audit-commands.md."* — names the
@@ -212,7 +216,7 @@ audit changes` instead):
 $ strata audit status
 error: No audit git sink is configured for this solution. Reading audit records ('strata audit
 status'/'strata audit changes') requires a configured 'git' audit sink, and none exists — add one
-under spec.audit.sinks in your Configuration document. See docs/work/audit-trail.md and
+under spec.audit.sinks in your Configuration document. See docs/design/audit-trail.md and
 docs/design/audit-commands.md.
 $ echo $?
 2
@@ -658,7 +662,7 @@ accurate.
 ## Related Decisions
 
 No new ADR — this extends the existing Layer 2/4 design in
-`audit-trail.md` (work doc) (itself grounded in ADR-0003's layering and
+[audit-trail.md](audit-trail.md) (itself grounded in ADR-0003's layering and
 ADR-0015's identity-not-paths/`.strata/` discovery exclusion) rather than
 introducing a new architectural decision. Reuses
 [audit-sink-dispatch.md](audit-sink-dispatch.md)'s existing sink model

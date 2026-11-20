@@ -71,6 +71,19 @@ def scalar_shorthand_schema(scalar_type: Any) -> Callable[[dict[str, Any]], None
     return extend
 
 
+def string_or_list_schema(schema: dict[str, Any]) -> None:
+    """`json_schema_extra` for a `list[str]` field whose `mode="before"` validator also takes one string.
+
+    The field-level counterpart of `scalar_shorthand_schema()`: the coercion is invisible to the exported editor
+    schema, which would otherwise flag `depends_on: other` while strata accepts it. Adds a string branch next to the
+    array (and `null`) the field already allows.
+    """
+    branches = schema.pop("anyOf", None)
+    if branches is None:
+        branches = [{key: schema.pop(key) for key in ("type", "items") if key in schema}]
+    schema["anyOf"] = [{"type": "string"}, *branches]
+
+
 def expires_date_text(value: object) -> object:
     """For a `mode="before"` validator on an `expires` field that holds an ISO date as text.
 

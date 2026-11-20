@@ -220,7 +220,7 @@ def test_validate_topology_components_rejects_unregistered_role_without_addition
 
 # ---------------------------------------------------------------------------
 # validate_resource_subnets() — WorkspaceResourceSubnetModel.subnet against a
-# real, loaded Network document's subnet names (docs/work/solution-loading-
+# real, loaded Network document's subnet names (docs/design/solution-loading-
 # and-phase2-validation.md). `.network` (which Network *document*) is
 # already checked in Phase 1 (`validate_resource_subnet_references`,
 # `workspace_model.py`); this is only the Phase 2 half.

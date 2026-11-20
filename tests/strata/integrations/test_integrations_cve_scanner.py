@@ -51,7 +51,7 @@ def _patch_run(monkeypatch, result: CommandResult):
 
 
 # ---------------------------------------------------------------------------
-# Declared backends (docs/work/integration-readiness.md Phases 6-7)
+# Declared backends (docs/design/integration-readiness.md)
 # ---------------------------------------------------------------------------
 
 

@@ -128,7 +128,7 @@ def test_set_raises_integration_error_when_the_write_itself_fails(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# get() / put() — KeyValueStoreIntegration (docs/work/key-value-store-
+# get() / put() — KeyValueStoreIntegration (docs/design/key-value-store-
 # integration.md's Backend 2) — real ETag-based CAS, unlike Key Vault.
 # ---------------------------------------------------------------------------
 

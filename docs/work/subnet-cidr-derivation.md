@@ -102,7 +102,7 @@ designing rather than just coding:
 
 - `strata build run` has **no persistence mechanism today.** Its build
   output directory is wiped and fully re-rendered on every run by default
-  (`build-command.md`'s own pseudocode: `should_clean` defaults to `True`
+  ([build-command.md](../design/build-command.md)'s "Cleaning": `should_clean` defaults to `True`
   for the default build path; `write_resolved_manifest()` writes
   `resolved.yaml` into that same wiped directory, so it's a fresh
   snapshot every run, never a prior-run reference). There is nowhere in

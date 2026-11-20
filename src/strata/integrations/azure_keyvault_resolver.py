@@ -24,7 +24,7 @@ ADR-0021 D7 retrofit: a `StoreIntegration`, `TRANSPORTS={"sdk"}` — keeps
 SDK client carries its own auth chain and HTTP stack, and reimplementing
 that would be the opposite of leaner.
 
-Also a `KeyValueStoreIntegration` (docs/work/key-value-store-integration.md's
+Also a `KeyValueStoreIntegration` (docs/design/key-value-store-integration.md's
 Backend 7) — some teams already use Key Vault as a general small-settings
 store rather than Azure App Configuration, specifically because it's
 cheaper for that usage pattern, which this capability's shape (small
@@ -148,7 +148,7 @@ class AzureKeyVaultResolver(StoreIntegration, KeyValueStoreIntegration):
         """Return the current value and version of secret `key`, or `None`
         if it does not exist in the vault — reuses `resolve()`'s own
         `get_secret()` call, but treats "not found" as a normal outcome
-        here, not a failure (docs/work/key-value-store-integration.md's
+        here, not a failure (docs/design/key-value-store-integration.md's
         Backend 7).
 
         Raises:

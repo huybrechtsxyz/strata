@@ -41,7 +41,7 @@ but the loader's index must be keyed `(remote, kind, name)` with
 """
 
 from enum import Enum
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar
 
 from pydantic import Field, field_validator, model_validator
 
@@ -52,6 +52,7 @@ from strata.models.common_models import (
     PlatformVersion,
     validate_kind_matches,
 )
+from strata.models.reference_fields import RemoteReference
 from strata.utils.names import check_unique_names
 from strata.utils.path_safety import (
     validate_no_path_traversal,
@@ -209,7 +210,7 @@ class SolutionRemoteModel(PlatformBaseModel):
         "versions and the real pin is SourceModel.chart_version instead. Whether an "
         "OCI remote is chart-serving needs the loaded solution's SourceModel usages, "
         "so that half of the rule is a Phase 2 check "
-        "(docs/work/solution-loading-and-phase2-validation.md, gap #3) — this field "
+        "(docs/design/solution-loading-and-phase2-validation.md) — this field "
         "is merely optional here, and schema-valid to omit even for a non-chart OCI "
         "remote until Phase 2 sees a real consumer.",
     )
@@ -221,7 +222,7 @@ class SolutionRemoteModel(PlatformBaseModel):
         "checkout beside the solution, `../iac-int-deployment`; or an absolute path. Strata reads it there "
         "and never clones it. Use instead of `reference` when the pipeline owns the ref; implies "
         "`fetch: external`.\n\n"
-        "Design notes: docs/work/remote-external-path.md. Without it, a `fetch: external` "
+        "Design notes: docs/design/remotes.md. Without it, a `fetch: external` "
         "remote is found at `.strata/remotes/<name>/<reference>`, so a pipeline must repeat "
         "the ref it checked out and link its checkout there. Not keyed by ref: a version pin "
         "cannot apply to it (ADR-0019 rule 4), so there is only ever one tree.",
@@ -386,6 +387,18 @@ class SolutionDiscoveryModel(PlatformBaseModel):
         "Added to the loader's built-in ignores, never replacing them. Note: these are fnmatch-style globs, "
         "not full gitignore syntax \u2014 there is no negation ('!') and no leading-slash anchoring.",
     )
+    remotes: list[Annotated[PlatformName, RemoteReference()]] | None = Field(
+        None,
+        description="Remotes whose checkouts are scanned for documents too, as extra roots beside the solution "
+        "root: for example one repository per hub zone. Each must be a `git` remote with a `path` (a checkout "
+        "a pipeline or developer made), and must be checked out, or every command fails. Documents found there "
+        "join the solution's one namespace, and paths inside them stay relative to the solution root. `exclude` "
+        "applies inside each root, relative to that root. The build records each one's commit in "
+        "`resolved.yaml` like any other remote.\n\n"
+        "Design notes: docs/design/remote-commit-provenance.md, 'Documents in other repositories'. Named here, not as a "
+        "flag on the remote: a "
+        "remote says where a repository is, discovery says what is scanned.",
+    )
 
 
 class SolutionSpecModel(PlatformBaseModel):
@@ -393,6 +406,7 @@ class SolutionSpecModel(PlatformBaseModel):
 
     schema_rules: ClassVar[tuple[str, ...]] = (
         "Remote names must be unique, because the name is how `@<name>/...` references are resolved.",
+        "Each name in `discovery.remotes` must be a declared `git` remote with a `path`, listed once.",
     )
 
     configuration: str = Field(
@@ -421,6 +435,25 @@ class SolutionSpecModel(PlatformBaseModel):
         """Remote names must be unique — they are the '@<name>' resolution key."""
         if self.remotes:
             check_unique_names([r.name for r in self.remotes], "remote names in solution")
+        return self
+
+    @model_validator(mode="after")
+    def validate_document_remotes(self) -> "SolutionSpecModel":
+        """`discovery.remotes` names path remotes only: a ref-mode remote would need a clone before anything loads."""
+        listed = (self.discovery.remotes or []) if self.discovery is not None else []
+        if not listed:
+            return self
+        check_unique_names(listed, "spec.discovery.remotes")
+        declared = {remote.name: remote for remote in (self.remotes or [])}
+        for name in listed:
+            remote = declared.get(name)
+            if remote is None:
+                raise ValueError(f"spec.discovery.remotes: '{name}' is not a remote declared in spec.remotes.")
+            if remote.type != RemoteType.GIT or remote.path is None:
+                raise ValueError(
+                    f"spec.discovery.remotes: remote '{name}' must be a 'git' remote with a 'path' (a checkout "
+                    "that is already on disk), because documents are read before anything is cloned."
+                )
         return self
 
 

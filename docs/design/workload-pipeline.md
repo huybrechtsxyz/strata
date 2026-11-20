@@ -11,11 +11,11 @@
 
 ADR-0022 D5-D7 found this while checking how v1 actually shaped its input:
 `Namespace.spec.modules` (Compose/Helm workloads) is a second, disconnected
-pipeline from the provisioner one `build-command.md` describes —
+pipeline from the provisioner one [build-command.md](build-command.md) describes —
 `ModuleReferenceModel`, never `ProvisionerModel`/`ProvisioningStepModel`,
 and its integration resolves from a bare `module.spec.type` string, never a
 named `integration:` binding. This doc tracks that second pipeline's real
-build-out, the same way `build-command.md` tracks the provisioner one.
+build-out, the same way build-command.md does the provisioner one.
 
 ## Current Design
 
@@ -107,7 +107,7 @@ Every line above is real, built code today — not a sketch.
   `prepare_namespace()`'s home on the ABC
 - [ADR-0025](../decisions/0025-strata-supplies-input-not-source-rewriting.md)
   — why `sync_module_source()` copies a chart verbatim and never rewrites it
-- `build-command.md` (work doc) — the provisioner pipeline this one
+- [build-command.md](build-command.md) — the provisioner pipeline this one
   runs alongside, inside the same `build_run()` call
 
 

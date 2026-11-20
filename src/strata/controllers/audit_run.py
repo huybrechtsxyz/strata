@@ -1,18 +1,10 @@
 #!/usr/bin/env python3
 """Finalize and distribute a deploy run's audit trail — the end-of-run
-sequencing (docs/work/audit-trail.md's "Write once locally, then
+sequencing (docs/design/audit-trail.md's "Write once locally, then
 distribute").
 
-Phase 5 of that doc's Layer 2 Implementation Plan — the final phase,
-gluing Phases 1-4 into `deploy run`'s actual command flow. Deliberately a
-NEW module, not a change to `deploy_controller.py::deploy_run()` itself:
-that function's existing fail-fast, single-return-diagnostics shape is
-complex, heavily tested, and load-bearing — this wraps its *result*
-rather than restructuring its internals to expose finer-grained stage/step
-data it doesn't have today. `stages`/per-step timing on the manifest are
-therefore coarser than the full design in this pass: no `stages[]` at all
-— revisited once `deploy_run()` itself is refactored to expose that data
-(separate, larger work, not bundled into this phase).
+Glues the audit trail into `deploy run`'s command flow. It wraps `deploy_run()`'s *result*: the run's findings,
+and the `stages` its `StageLog` recorded (`deploy_stage_log.py`), which also decide `partial`.
 
 `artifacts.platform` references `build_path/resolved.yaml`
 (`build_controller.write_resolved_manifest()`) — v2's closest real
@@ -46,10 +38,12 @@ from pathlib import Path
 from typing import Literal, cast
 
 from strata import __version__
+from strata.controllers.audit_error_category import error_category
 from strata.controllers.audit_event_rendering import render_manifest_event, render_metrics_event
 from strata.controllers.audit_path_resolution import resolve_audit_relative_path
 from strata.controllers.audit_push import push_audit_files
 from strata.controllers.build_controller import apply_remote_version_pins
+from strata.controllers.checkout_state import checkout_state
 from strata.controllers.deployment_document import render_document
 from strata.controllers.deployment_report_store import DeploymentReportStore
 from strata.controllers.deployment_report_view import deployment_report
@@ -60,6 +54,7 @@ from strata.controllers.policy_results import read_policy_results
 from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.security_gate_controller import built_commit_sha
 from strata.controllers.solution_context import SolutionContext
+from strata.controllers.source_record import read_build_record
 from strata.controllers.value_controller import (
     reachable_environments,
     resolve_deployment,
@@ -76,10 +71,12 @@ from strata.models.audit_manifest_model import (
     ManifestArtifactsModel,
     ManifestChartModel,
     ManifestImageModel,
+    ManifestPipelineModel,
     ManifestPlatformReferenceModel,
     ManifestProviderModel,
     ManifestRepositoryModel,
     ManifestSbomReferenceModel,
+    ManifestStageModel,
 )
 from strata.models.audit_metrics_model import DeploymentMetricsModel, MetricsDimensionsModel, MetricsMeasuresModel
 from strata.models.audit_model import EVENT_DEFAULTS, AuditGitSinkTargetModel, AuditSinkModel
@@ -93,10 +90,10 @@ from strata.models.namespace_model import NamespaceModel
 from strata.services.environment_service import merge_environment_models
 from strata.utils import layout
 from strata.utils.actor import resolve_actor
+from strata.utils.ci_run import resolve_pipeline_run
 from strata.utils.diagnostics import Diagnostics, Severity
 from strata.utils.errors import StrataError
 from strata.utils.sbom_file import SBOM_FILENAME, parse_sbom
-from strata.utils.transport import run_command
 
 #: Public — `controllers/audit_read.py` (docs/design/audit-commands.md) reads
 #: this back and must glob for the exact same filename this module writes.
@@ -104,7 +101,6 @@ MANIFEST_FILENAME = "_manifest.json"
 _METRICS_FILENAME = "_metrics.json"
 #: The handover document `spec.documentation` writes next to the manifest (docs/design/deployment-documentation.md).
 HANDOVER_FILENAME = "_handover.md"
-_GIT_REV_PARSE_TIMEOUT = 30
 
 
 def finalize_and_distribute_deploy_audit(
@@ -127,6 +123,7 @@ def finalize_and_distribute_deploy_audit(
     change_approved_by: str | None = None,
     change_approved_at: str | None = None,
     providers: Sequence[ManifestProviderModel] = (),
+    stages: Sequence[ManifestStageModel] = (),
 ) -> Diagnostics:
     """Finalize the manifest + metrics for a `deploy run` invocation, write
     them locally, then distribute to every configured sink.
@@ -174,6 +171,8 @@ def finalize_and_distribute_deploy_audit(
             auto-derived from this run's own clock.
         providers: One entry per provisioner the run used, with the tool version and path its preflight found
             (`deploy_run(on_tool=...)`, docs/design/helm-chart-deployment.md); `artifacts.providers` is omitted when empty.
+        stages: What each step did (`deploy_run(stage_log=...)`); `stages` is omitted when empty. A failed run with
+            a stage that succeeded is `partial`: something changed before it stopped.
 
     Returns:
         Findings from finalizing/writing/distributing only — never
@@ -196,7 +195,7 @@ def finalize_and_distribute_deploy_audit(
     configuration = _single_configuration(context)
     completed_at = datetime.now(timezone.utc)
     duration_seconds = (completed_at - started_at).total_seconds()
-    status: Literal["success", "failed"] = "success" if run_diagnostics.ok else "failed"
+    status = _status(run_diagnostics, stages)
     actor = resolve_actor()
     environment = _single_environment(deployment)
     change_reference = _build_change_reference(
@@ -211,7 +210,16 @@ def finalize_and_distribute_deploy_audit(
         actor=actor,
         supplied_at=completed_at.isoformat(),
     )
-    repositories, images, charts = _collect_artifacts_bom(context, deployment, diagnostics)
+    # Never raises; `_platform_reference()` above already reported a missing file.
+    record = read_build_record(build_path)
+    repositories, images, charts = _collect_artifacts_bom(
+        context, deployment, diagnostics, recorded=None if record is None else record.remotes
+    )
+    solution_commit, solution_dirty = (
+        (built_commit_sha(context.root), None) if record is None else (record.solution_commit, record.solution_dirty)
+    )
+
+    policy_results = None if action == "destroy" else read_policy_results(build_path)
 
     manifest = DeploymentManifestModel(
         execution_id=execution_id,
@@ -220,13 +228,16 @@ def finalize_and_distribute_deploy_audit(
         deployment=deployment_name,
         workspace=deployment.spec.workspace,
         environment=environment,
+        file=_document_file(context, deployment_name),
         started_at=started_at.isoformat(),
         completed_at=completed_at.isoformat(),
         duration_seconds=duration_seconds,
         status=status,
         dry_run=False,
         deployed_by=actor,
-        commit_sha=built_commit_sha(context.root),
+        pipeline=_pipeline(),
+        commit_sha=solution_commit,
+        commit_dirty=solution_dirty,
         artifacts=ManifestArtifactsModel(
             platform=platform_ref,
             repositories=repositories,
@@ -236,18 +247,35 @@ def finalize_and_distribute_deploy_audit(
         ),
         sbom=_sbom_reference(build_path, diagnostics),
         change_reference=change_reference,
-        policy_results=None if action == "destroy" else read_policy_results(build_path),
+        stages=list(stages) or None,
+        policy_results=policy_results,
         errors=run_diagnostics.messages(Severity.ERROR) or None,
+        warnings=run_diagnostics.messages(Severity.WARNING) or None,
+        messages=run_diagnostics.messages(Severity.INFO) or None,
     )
     metrics = DeploymentMetricsModel(
         execution_id=execution_id,
         deployment=deployment_name,
         workspace=deployment.spec.workspace,
         timestamp=started_at.isoformat(),
-        dimensions=MetricsDimensionsModel(outcome=status, action=action, environment=environment, actor=actor),
-        measures=MetricsMeasuresModel(
-            duration_seconds=duration_seconds, stages_total=1, stages_failed=0 if status == "success" else 1
+        # `outcome` stays success or failed, so a dashboard's failure rate counts a partial run as failed.
+        dimensions=MetricsDimensionsModel(
+            outcome="success" if status == "success" else "failed",
+            action=action,
+            environment=environment,
+            tenant=deployment.spec.tenant,
+            actor=actor,
+            commit_sha=solution_commit,
         ),
+        measures=MetricsMeasuresModel(
+            duration_seconds=duration_seconds,
+            stages_total=sum(stage.status != "skipped" for stage in stages),
+            stages_failed=sum(stage.status == "failed" for stage in stages),
+            # Left out, not zero, when no policy was judged (a destroy, or a build with none configured).
+            policy_checks_total=None if policy_results is None else len(policy_results),
+            policy_checks_failed=None if policy_results is None else sum(not r.passed for r in policy_results),
+        ),
+        error_category=error_category(run_diagnostics, policy_results),
     )
 
     relative_path = resolve_audit_relative_path(deployment, configuration, started_at.isoformat())
@@ -435,6 +463,10 @@ def _dispatch_sink(
         resolved_values=git_sink_values,
     )
     if result.success:
+        if sink.git.action != "push":
+            # A path remote's `commit` or `none`: a later pipeline step pushes (docs/design/remote-commit-provenance.md,
+            # "Writing to a path remote").
+            diagnostics.info(f"sink '{sink.name}': {result.detail}", code="audit_sink_not_pushed")
         return
     _record_sink_failure(
         sink, f"sink '{sink.name}': audit push failed — {result.detail}", "audit_sink_push_failed", diagnostics
@@ -542,8 +574,8 @@ def _dispatch_integration_sink(
 def _record_sink_failure(sink: AuditSinkModel, message: str, code: str, diagnostics: Diagnostics) -> None:
     """One place deciding warn-vs-fail, so both sink arms can never drift apart.
 
-    `required` is the whole decision (docs/work/audit-trail.md's "Dispatch
-    failure — a `required` flag, not a binary silent-vs-fail choice").
+    `required` is the whole decision (docs/design/audit-trail.md's "When
+    delivery fails").
     """
     if sink.required:
         diagnostics.error(message, code=code)
@@ -574,8 +606,40 @@ def _single_environment(deployment: DeploymentModel) -> str | None:
     return None
 
 
+def _document_file(context: SolutionContext, deployment_name: str) -> str | None:
+    """The deployment document's file, relative to the solution root; absolute for one that lives elsewhere (a
+    document remote outside the solution)."""
+    entry = context.controller.index.get(PlatformKind.DEPLOYMENT, deployment_name)
+    if entry is None:
+        return None
+    try:
+        return entry.source.resolve().relative_to(context.root.resolve()).as_posix()
+    except ValueError:
+        return entry.source.as_posix()
+
+
+def _status(
+    run_diagnostics: Diagnostics, stages: Sequence[ManifestStageModel]
+) -> Literal["success", "partial", "failed"]:
+    """`success` without errors; `partial` when the run failed after a stage succeeded, so something changed;
+    `failed` otherwise (docs/design/audit-trail.md, "Stages")."""
+    if run_diagnostics.ok:
+        return "success"
+    return "partial" if any(stage.status == "success" for stage in stages) else "failed"
+
+
+def _pipeline() -> ManifestPipelineModel | None:
+    """The CI run doing this deploy (docs/design/audit-trail.md, "The audit files"); `None` outside CI."""
+    run = resolve_pipeline_run()
+    return None if run is None else ManifestPipelineModel(**run._asdict())
+
+
 def _collect_artifacts_bom(
-    context: SolutionContext, deployment: DeploymentModel, diagnostics: Diagnostics
+    context: SolutionContext,
+    deployment: DeploymentModel,
+    diagnostics: Diagnostics,
+    *,
+    recorded: Mapping[str, ManifestRepositoryModel] | None = None,
 ) -> tuple[dict[str, ManifestRepositoryModel] | None, list[ManifestImageModel] | None, list[ManifestChartModel] | None]:
     """The effective (pin-resolved) repositories/images/charts this
     deployment's workspace actually reaches — the fix for ADR-0019's own
@@ -593,6 +657,14 @@ def _collect_artifacts_bom(
     provisioners' and workload modules' `source.remote`, its namespaces'
     modules), never the whole solution's — a manifest records what this
     deployment actually used, not everything merely declared somewhere.
+
+    Repositories: with the build's record (`recorded`, from `resolved.yaml`'s `remotes`), each remote it holds is
+    copied as recorded, so the manifest names the tree that went into the build output, not the checkout as it is
+    now (docs/design/remote-commit-provenance.md, "The audit manifest copies the record"). That adds what the record
+    alone holds (an asset's
+    `spec.location`, a Checkov config's remote). A remote this workspace names that the build took no file from
+    (a chart-based module's) is listed as today, with no commit: there is no tree to record. Without a record (a
+    build made before it existed) a path remote's commit is read from its checkout, as before.
 
     Returns:
         `(repositories, images, charts)`, each `None` when empty rather
@@ -657,39 +729,37 @@ def _collect_artifacts_bom(
         all_remotes = {remote.name: remote for remote in (solution.spec.remotes or [])}
         scoped_remotes = {name: all_remotes[name] for name in remote_names if name in all_remotes}
         for name, remote in apply_remote_version_pins(scoped_remotes, version).items():
+            if recorded is not None:
+                repositories[name] = recorded.get(name) or ManifestRepositoryModel(url=remote.url, ref=remote.reference)
+                continue
             commit = (
                 _checkout_commit(name, layout.path_remote_location(context.root, remote.path), diagnostics)
                 if remote.path
                 else None
             )
             repositories[name] = ManifestRepositoryModel(url=remote.url, ref=remote.reference, commit=commit)
+    for key, entry in (recorded or {}).items():
+        repositories.setdefault(key, entry)
 
-    return (repositories or None, images or None, charts or None)
+    return (dict(sorted(repositories.items())) or None, images or None, charts or None)
 
 
 def _checkout_commit(name: str, checkout: Path, diagnostics: Diagnostics) -> str | None:
     """The commit a path remote's checkout is at, or `None` (with a warning) when it cannot be read.
 
     A path remote has no `reference`, so this is the only record of which tree a deploy used
-    (docs/work/remote-external-path.md). Requires `.git` in the directory itself: otherwise `git
+    (docs/design/remotes.md). Requires `.git` in the directory itself: otherwise `git
     rev-parse` would walk up and report the solution repository's own commit for a plain folder.
-    It never fails a deploy.
+    It never fails a deploy. The rule and the `git` call are `checkout_state()`'s
+    (docs/design/remote-commit-provenance.md, "Reading a checkout").
     """
-    if not (checkout / ".git").exists():
+    state = checkout_state(checkout)
+    if state.commit is None:
         diagnostics.warning(
-            f"Remote '{name}': '{checkout}' is not a git checkout, so the audit manifest records no commit for it.",
+            f"Remote '{name}': {state.problem}, so the audit manifest records no commit for it.",
             code="audit_remote_commit_unavailable",
         )
-        return None
-    result = run_command(["git", "rev-parse", "HEAD"], cwd=checkout, timeout=_GIT_REV_PARSE_TIMEOUT)
-    if not result.is_successful:
-        diagnostics.warning(
-            f"Remote '{name}': 'git rev-parse HEAD' failed in '{checkout}', so the audit manifest records no commit "
-            f"for it: {result.stderr.strip()}",
-            code="audit_remote_commit_unavailable",
-        )
-        return None
-    return result.stdout.strip() or None
+    return state.commit
 
 
 def _platform_reference(build_path: Path) -> tuple[ManifestPlatformReferenceModel | None, Diagnostics]:

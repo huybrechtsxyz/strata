@@ -45,6 +45,7 @@ from typing import Any
 
 from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.remote_resolution import RemoteResolutionError, resolve_remote
+from strata.controllers.source_record import ASSET_KEY_PREFIX, SourceRecord
 from strata.integrations.resolved_context import ResolvedAssetInfo
 from strata.models.asset_model import AssetModel
 from strata.models.auth_models import AuthenticationModel
@@ -96,8 +97,11 @@ def source_repo_root(
     remotes: dict[str, SolutionRemoteModel],
     *,
     credentials: RemoteCredentialResolver | None = None,
+    record: SourceRecord | None = None,
 ) -> Path:
     """The repository `source` lives in: its remote's checkout, or `root` when it names none (ADR-0018).
+
+    `record` registers the remote's checkout; the caller adds what it takes from it (`SourceRecord.took()`).
 
     Raises:
         SourceSyncError: `source.remote` is not declared in `remotes`.
@@ -114,6 +118,7 @@ def source_repo_root(
         credentials,
         integration=remote.integration if remote else None,
         owner=f"remote '{source.remote}'",
+        record=record,
     )
 
 
@@ -125,8 +130,31 @@ def _resolve_repo(
     integration: str | None,
     owner: str,
     checkout_path: Path | None = None,
+    record: SourceRecord | None = None,
+    record_as: str | None = None,
 ) -> Path:
-    """`resolve_remote()` with `integration`'s credentials resolved only if a clone happens."""
+    """`resolve_remote()` with `integration`'s credentials resolved only if a clone happens.
+
+    The one resolve call for build sources, so it is where `record` registers a remote's checkout, under `record_as`
+    (default: the remote's name).
+    """
+    located = _resolve_with_credentials(
+        root, remote, credentials, integration=integration, owner=owner, checkout_path=checkout_path
+    )
+    if record is not None and remote is not None:
+        record.resolved(record_as or remote.name, remote, located)
+    return located
+
+
+def _resolve_with_credentials(
+    root: Path,
+    remote: SolutionRemoteModel | None,
+    credentials: RemoteCredentialResolver | None,
+    *,
+    integration: str | None,
+    owner: str,
+    checkout_path: Path | None,
+) -> Path:
     if credentials is None or not integration:
         return resolve_remote(root, remote, checkout_path=checkout_path)
 
@@ -168,6 +196,7 @@ def sync_source(
     remotes: dict[str, SolutionRemoteModel],
     *,
     credentials: RemoteCredentialResolver | None = None,
+    record: SourceRecord | None = None,
 ) -> Path:
     """Copy `source`'s files into `build_path`, resolving its remote first.
 
@@ -182,6 +211,7 @@ def sync_source(
             and passed down (ADR-0022 D1a).
         credentials: Resolves `remote.integration`'s credentials for a clone; `None` (default) clones
             with ambient git credentials only.
+        record: Records the remote and `source_path` for `resolved.yaml`; `None` records nothing.
 
     Returns:
         The directory `source`'s files were copied into.
@@ -198,10 +228,12 @@ def sync_source(
             "(chart_name set) are pulled by the deployer itself (e.g. `helm pull`), not copied."
         )
 
-    repo_root = source_repo_root(root, source, remotes, credentials=credentials)
+    repo_root = source_repo_root(root, source, remotes, credentials=credentials, record=record)
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
     destination = source_destination(build_path, source)
+    if record is not None:
+        record.took(repo_root, source.source_path)
 
     # `source_path`/`target_path` are already validated as relative at the model layer, so
     # this only catches what a string check cannot: a symlink inside the repo pointing out
@@ -278,6 +310,7 @@ def sync_asset(
     *,
     slot: str | None = None,
     credentials: RemoteCredentialResolver | None = None,
+    record: SourceRecord | None = None,
 ) -> Path:
     """Copy `asset`'s files into `build_path/assets/<slot>/`, filling its
     `source_path` template against `properties` first (docs/design/
@@ -319,6 +352,7 @@ def sync_asset(
             on-disk path stays stable when a slot is bound to another document.
         credentials: Resolves the asset's `location.integration` / `remote.integration` credentials for a
             clone; `None` (default) clones with ambient git credentials only.
+        record: Records the remote (`asset:<name>` for a `spec.location`) and the filled `source_path`.
 
     Returns:
         The directory `asset`'s files were copied into
@@ -380,6 +414,8 @@ def sync_asset(
             integration=location.integration,
             owner=f"asset '{asset.meta.name}'",
             checkout_path=layout.asset_checkout_path(root, asset.meta.name, location.reference),
+            record=record,
+            record_as=f"{ASSET_KEY_PREFIX}{asset.meta.name}",
         )
     else:
         if asset.spec.remote is not None:
@@ -395,8 +431,11 @@ def sync_asset(
             credentials,
             integration=remote.integration if remote else None,
             owner=f"asset '{asset.meta.name}'",
+            record=record,
         )
     destination = build_path / "assets" / (slot or asset.meta.name)
+    if record is not None:
+        record.took(repo_root, filled_path, glob=_has_glob_magic(filled_path))
 
     if not _has_glob_magic(filled_path):
         origin = repo_root / filled_path
@@ -460,6 +499,7 @@ def sync_module_source(
     remotes: dict[str, SolutionRemoteModel],
     *,
     credentials: RemoteCredentialResolver | None = None,
+    record: SourceRecord | None = None,
 ) -> tuple[Path, Path] | None:
     """Materialise a workload module's chart source into `module_dir`
     (ADR-0022 D6/D7), if it has one to copy.
@@ -495,6 +535,7 @@ def sync_module_source(
         remotes: Every declared remote, keyed by name.
         credentials: Resolves `remote.integration`'s credentials for a clone; `None` (default) clones
             with ambient git credentials only.
+        record: Records the remote and `source_path` for `resolved.yaml`; `None` records nothing.
 
     Returns:
         `(repository root, copied origin)` for a copied source, so a local chart's `file://` dependencies can be
@@ -509,9 +550,11 @@ def sync_module_source(
         module_dir.mkdir(parents=True, exist_ok=True)
         return None
 
-    repo_root = source_repo_root(root, source, remotes, credentials=credentials)
+    repo_root = source_repo_root(root, source, remotes, credentials=credentials, record=record)
     assert source.source_path is not None  # guaranteed by SourceModel.validate_source_mode for git-based sources
     origin = repo_root / source.source_path
+    if record is not None:
+        record.took(repo_root, source.source_path)
 
     try:
         resolve_within(repo_root, origin)

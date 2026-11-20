@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Policy evaluation results sidecar (`build_path/policy_results.json`) —
-docs/work/audit-trail.md's "DeploymentManifestModel.policy_results
-population" design. The one shared file-format contract between
+docs/design/audit-trail.md's "Policy
+results". The one shared file-format contract between
 `build run` (writes) and `deploy run`'s audit finalize step (reads) —
 matches the existing `resolved.yaml`/`sbom.json` hand-off precedent
 between the two commands.

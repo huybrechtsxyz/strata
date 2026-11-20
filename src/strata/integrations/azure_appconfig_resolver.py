@@ -24,7 +24,7 @@ ADR-0021 D7 retrofit: a `StoreIntegration`, `TRANSPORTS={"sdk"}` — keeps
 `AzureAppConfigurationClient` unchanged, same reasoning as the Key Vault
 resolver.
 
-Also a `KeyValueStoreIntegration` (docs/work/key-value-store-integration.md's
+Also a `KeyValueStoreIntegration` (docs/design/key-value-store-integration.md's
 Backend 2) — real compare-and-swap, unlike Key Vault's own retrofit:
 App Configuration's ETag + `match_condition` natively supports both the
 create-only (`NEW_KEY_VERSION`) and update-only (a real prior ETag)
@@ -111,7 +111,7 @@ class AzureAppConfigResolver(StoreIntegration, KeyValueStoreIntegration):
         """Return the current value and version of configuration key `key`,
         or `None` if it does not exist in the store — reuses `resolve()`'s
         own `get_configuration_setting()` call, but treats "not found" as
-        a normal outcome here, not a failure (docs/work/
+        a normal outcome here, not a failure (docs/design/
         key-value-store-integration.md's Backend 2).
 
         Raises:

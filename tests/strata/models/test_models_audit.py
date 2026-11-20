@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Tests for the audit trail config models — `spec.audit` (docs/work/audit-trail.md).
+"""Tests for the audit trail config models — `spec.audit` (docs/design/audit-trail.md).
 
-Phase 1 of that doc's Layer 2 Implementation Plan: config models only. The
+Config models only. The
 written artifacts (manifest, metrics) are Phase 2, not covered here.
 """
 
@@ -64,6 +64,26 @@ def test_sink_required_defaults_false():
     assert sink.required is False
 
 
+def test_git_sink_action_defaults_to_push_and_takes_commit_or_none():
+    assert AuditSinkModel.model_validate(_git_sink()).git.action == "push"
+    for action in ("commit", "none", "push"):
+        data = _git_sink()
+        data["git"]["action"] = action
+        assert AuditSinkModel.model_validate(data).git.action == action
+    data = _git_sink()
+    data["git"]["action"] = "stage"
+    with pytest.raises(ValidationError):
+        AuditSinkModel.model_validate(data)
+
+
+def test_git_sink_branch_must_not_read_as_a_git_option():
+    """It is passed to `git fetch origin <branch>`, where `--upload-pack=...` would run a command."""
+    data = _git_sink()
+    data["git"]["branch"] = "--upload-pack=touch /tmp/pwned"
+    with pytest.raises(ValidationError, match="must not start with '-'"):
+        AuditSinkModel.model_validate(data)
+
+
 def test_sink_rejects_unknown_event_type():
     data = _git_sink()
     data["events"] = ["deployment.completed", "policy.violated"]
@@ -80,6 +100,13 @@ def test_config_is_fully_optional():
     config = AuditConfigModel.model_validate({})
     assert config.event_overrides is None
     assert config.sinks is None
+    assert config.require_remote_commits is False
+
+
+def test_config_accepts_require_remote_commits():
+    assert AuditConfigModel.model_validate({"require_remote_commits": True}).require_remote_commits is True
+    with pytest.raises(ValidationError):
+        AuditConfigModel.model_validate({"require_remote_commits": "sometimes"})
 
 
 def test_config_rejects_unknown_event_override_key():

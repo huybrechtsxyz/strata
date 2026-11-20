@@ -106,7 +106,7 @@ def test_evaluate_checkov_policy_is_a_noop_when_unset(tmp_path: Path):
 
 
 def test_a_declared_checkov_document_configures_the_scanner(tmp_path: Path, monkeypatch):
-    """docs/work/integration-readiness.md Phase 8 (D26): the enabled `checkov` document is bound."""
+    """docs/design/integration-readiness.md, "Local tools as declarable integrations": the enabled `checkov` document is bound."""
     import strata.controllers.checkov_controller as checkov_controller_module
     from strata.models.integration_model import IntegrationModel
 
@@ -715,3 +715,20 @@ def test_findings_listing_reads_the_same_snapshot(tmp_path: Path, monkeypatch):
 
     assert report.targets[0].missing == "config_file '.checkov.yaml' not found in its source repository"
     assert scanner.scanned_directories == []
+
+
+@pytest.mark.parametrize(
+    ("mode", "severity", "advice"), [("block", "error", "to 'warn'"), ("warn", "warning", "at 'block'")]
+)
+def test_a_checkov_scan_that_cannot_run_says_what_to_do(mode, severity, advice):
+    """docs/design/diagnostic-guidance.md: every "cannot evaluate" finding says how to fix it, and what
+    `on_missing_data` trades off."""
+    from strata.controllers.checkov_controller import _report_missing_data
+    from strata.utils.diagnostics import Diagnostics
+
+    diagnostics = Diagnostics()
+    _report_missing_data(diagnostics, mode, "checkov not on PATH", scope="tf_a")
+
+    [finding] = diagnostics.items
+    assert (finding.severity.value, finding.code) == (severity, "checkov_policy_missing_data")
+    assert finding.hint is not None and "install checkov" in finding.hint and advice in finding.hint

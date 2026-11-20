@@ -115,6 +115,11 @@ def get(integration_type: str, config: IntegrationModel | None = None) -> Integr
     return integration_class(config)
 
 
+def is_unported_v1_type(integration_type: str) -> bool:
+    """Whether `integration_type` is a v1 type not yet ported to v2: a real type, not a typo."""
+    return integration_type in _KNOWN_V1_TYPES
+
+
 def known_types() -> list[str]:
     """Every registered type, built-in and installed plugin, sorted - for "did you mean" messages."""
     return sorted(set(_KNOWN) | {ep.name for ep in entry_points(group=ENTRY_POINT_GROUP)})

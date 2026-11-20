@@ -35,6 +35,7 @@ from strata.commands.options import output_option, pin_callback, quiet_option, r
 from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.deploy_controller import deploy_run
+from strata.controllers.deploy_stage_log import StageLog
 from strata.controllers.integration_readiness import IntegrationReadiness
 from strata.controllers.solution_context import open_solution
 from strata.models.audit_manifest_model import ManifestProviderModel
@@ -214,7 +215,7 @@ def _change_reference_options(f: _F) -> _F:
     makes a real infrastructure change and so needs an audit trail entry
     (`run`/`apply` — never `setup`/`check`/`plan`, which are
     non-mutating). Factored into one decorator because these feed
-    `ChangeReferenceModel` (docs/work/audit-trail.md) — a
+    `ChangeReferenceModel` (docs/design/audit-trail.md) — a
     compliance-relevant field set where two independently-maintained
     copies of the same 8 options drifting apart (a typo'd help string, a
     missing metavar) is a worse outcome than for purely ergonomic options,
@@ -273,7 +274,7 @@ def _change_reference_options(f: _F) -> _F:
         metavar="TEXT",
         help="Change/ticket tracker, e.g. 'jira', 'azure_devops', 'servicenow', or an internal name. "
         "Required together with --change-id/--change-reason, or omit all three — docs/design/"
-        "audit-trail.md's ChangeReferenceModel.",
+        "audit-trail.md, 'Change reference'.",
     )(f)
     return f
 
@@ -474,6 +475,7 @@ def deploy_run_command(
         # own "Per-line event shape" design question).
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
         providers, on_tool = _provider_recorder()
+        stage_log = StageLog()
 
         diagnostics = deploy_run(
             context,
@@ -489,10 +491,11 @@ def deploy_run_command(
             pin=pin,
             output_max_age=output_max_age,
             on_tool=on_tool,
+            stage_log=stage_log,
         )
 
-        # Audit trail — finalize + write locally + distribute (docs/work/
-        # audit-trail.md's Layer 2). Never affects which deploy stages ran or
+        # Audit trail — finalize + write locally + distribute (docs/design/
+        # audit-trail.md). Never affects which deploy stages ran or
         # their recorded outcome; a required sink's push failure can still
         # fail this command's own exit code, merged in below. `smoke_test`
         # is zero-contact, same as `dry_run` — both must no-op the manifest/
@@ -515,6 +518,7 @@ def deploy_run_command(
             change_approved_by=change_approved_by,
             change_approved_at=change_approved_at,
             providers=list(providers.values()),
+            stages=stage_log.stages(diagnostics),
         )
         diagnostics.extend(audit_diagnostics)
 
@@ -787,6 +791,7 @@ def deploy_apply_command(
 
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
         providers, on_tool = _provider_recorder()
+        stage_log = StageLog()
 
         diagnostics = deploy_run(
             context,
@@ -801,10 +806,11 @@ def deploy_apply_command(
             pin=pin,
             output_max_age=output_max_age,
             on_tool=on_tool,
+            stage_log=stage_log,
         )
 
-        # Audit trail — same as `deploy run` (docs/work/audit-trail.md's
-        # Layer 2): `apply` makes a real infrastructure change, exactly
+        # Audit trail — same as `deploy run` (docs/design/audit-trail.md):
+        # `apply` makes a real infrastructure change, exactly
         # like `run`'s own apply tail, so a pipeline split into
         # plan/apply stages must not silently lose audit coverage relative
         # to a monolithic `deploy run`. Never a dry run here — `dry_run`
@@ -827,6 +833,7 @@ def deploy_apply_command(
             change_approved_by=change_approved_by,
             change_approved_at=change_approved_at,
             providers=list(providers.values()),
+            stages=stage_log.stages(diagnostics),
         )
         diagnostics.extend(audit_diagnostics)
 
@@ -946,6 +953,7 @@ def deploy_destroy_command(
 
         on_step, on_line = _line_follow_callbacks(follow, output, run.step)
         providers, on_tool = _provider_recorder()
+        stage_log = StageLog()
 
         diagnostics = deploy_run(
             context,
@@ -962,6 +970,7 @@ def deploy_destroy_command(
             pin=pin,
             output_max_age=output_max_age,
             on_tool=on_tool,
+            stage_log=stage_log,
         )
 
         # A preview or a smoke test changes nothing, so only a real destroy gets an audit record.
@@ -985,6 +994,7 @@ def deploy_destroy_command(
                 change_approved_by=change_approved_by,
                 change_approved_at=change_approved_at,
                 providers=list(providers.values()),
+                stages=stage_log.stages(diagnostics),
             )
             diagnostics.extend(audit_diagnostics)
 

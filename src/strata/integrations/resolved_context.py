@@ -77,7 +77,7 @@ class SecretMetadata:
 class KeyValueEntry:
     """One `KeyValueStoreIntegration.get()` result — the stored bytes and
     the backend's own version/ETag for them, consumed by a caller's
-    compare-and-swap retry loop (docs/work/key-value-store-integration.md)."""
+    compare-and-swap retry loop (docs/design/key-value-store-integration.md)."""
 
     value: bytes
     version: str
@@ -192,7 +192,7 @@ class ResolvedWorkspaceGraph:
     by `build_controller.py`, before the per-provisioner loop — derived,
     minimal data, not raw `DeploymentModel`/`EnvironmentModel` instances.
 
-    `tenant` (docs/work/build-command.md's `tenant` Terraform category) is
+    `tenant` (docs/design/build-command.md's `tenant` Terraform category) is
     the deployment's own `spec.tenant` reference, resolved once by
     `value_controller.resolve_tenant()` — `None` when the deployment
     references no tenant, or the reference doesn't resolve.

@@ -96,7 +96,7 @@ def test_integration_accepts_container_capability():
 
 
 def test_integration_accepts_key_value_capability():
-    """'key_value' (docs/work/key-value-store-integration.md) is a recognized core capability."""
+    """'key_value' (docs/design/key-value-store-integration.md) is a recognized core capability."""
     data = _minimal_integration()
     data["spec"]["capabilities"] = ["key_value"]
     model = IntegrationModel.model_validate(data)

@@ -3,7 +3,7 @@
 - Status: accepted
 - Date: 2026-10-27
 - Related: [ADR-0050](0050-one-offline-integration-readiness-check.md),
-  `integration-readiness.md` (work doc) R1, D25-D28,
+  [integration-readiness.md](../design/integration-readiness.md), "Local tools as declarable integrations",
   [ADR-0021](0021-integration-layer.md) (integration layer)
 
 ## Context and Problem Statement

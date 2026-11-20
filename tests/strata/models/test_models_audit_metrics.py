@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the deployment metrics model — `_metrics.json` (docs/work/audit-trail.md).
-
-Phase 2 of that doc's Layer 2 Implementation Plan.
-"""
+"""Tests for the deployment metrics model — `_metrics.json` (docs/design/audit-trail.md)."""
 
 import pytest
 from pydantic import ValidationError
@@ -40,18 +37,16 @@ def test_metrics_default_label_safe_excludes_unbounded_fields():
     assert "outcome" in model.label_safe
 
 
-def test_metrics_sections_default_measured_false():
-    data = _minimal_metrics(sections={"cost": {}})
-    model = DeploymentMetricsModel.model_validate(data)
-    assert model.sections["cost"].measured is False
-    assert model.sections["cost"].data is None
+def test_metrics_drop_the_sections_nothing_measured():
+    # docs/design/audit-trail.md, History: no cost, CVE or drift section was ever written.
+    with pytest.raises(ValidationError, match="sections"):
+        DeploymentMetricsModel.model_validate(_minimal_metrics(sections={"cost": {}}))
 
 
-def test_metrics_sections_can_be_measured_with_data():
-    data = _minimal_metrics(sections={"cost": {"measured": True, "data": {"total_usd": 12.5}}})
-    model = DeploymentMetricsModel.model_validate(data)
-    assert model.sections["cost"].measured is True
-    assert model.sections["cost"].data == {"total_usd": 12.5}
+def test_metrics_measures_drop_resource_changes():
+    measures = {"duration_seconds": 1.0, "stages_total": 1, "stages_failed": 0, "resource_changes": 3}
+    with pytest.raises(ValidationError, match="resource_changes"):
+        DeploymentMetricsModel.model_validate(_minimal_metrics(measures=measures))
 
 
 def test_metrics_error_category_requires_failed_outcome():

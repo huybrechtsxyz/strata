@@ -37,6 +37,7 @@ from strata.models.common_models import (
     PlatformName,
     PlatformVersion,
     scalar_shorthand_schema,
+    string_or_list_schema,
     validate_kind_matches,
 )
 from strata.models.image_tag_policy_model import ImageTagPolicyModel
@@ -135,11 +136,12 @@ class WorkspaceResourceModel(PlatformBaseModel):
     )
     depends_on: list[str] | None = Field(
         None,
-        description="Names of other resources in this workspace this one depends on. Documentation "
-        "only for now: strata does not order or enforce it. Use a step's `depends_on` "
+        description="Names of other resources in this workspace this one depends on: a list, or one name. "
+        "Documentation only for now: strata does not order or enforce it. Use a step's `depends_on` "
         "for ordering.\n\n"
         "Design notes: List of resource names this resource depends on "
         "(workspace-specific gluing)",
+        json_schema_extra=string_or_list_schema,
     )
     firewalls: list[str] | None = Field(
         None,

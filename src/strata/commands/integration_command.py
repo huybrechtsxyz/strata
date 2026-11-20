@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`strata integration check NAME` and `strata integration list` (docs/work/integration-readiness.md).
+"""`strata integration check NAME` and `strata integration list` (docs/design/integration-readiness.md).
 
 Both report local readiness (`integration_readiness`, the same check deploy preflight runs: enabled,
 tool on PATH, version). `check` then verifies credentials and reachability for a type implementing

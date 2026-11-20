@@ -65,6 +65,7 @@ class DeploymentStatusRecord:
     completed_at: str
     change_reference: ChangeReferenceModel | None
     commit_sha: str | None = None
+    failed_step: str | None = None
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,13 @@ class DeploymentChangeRecord:
     version: str
     change_reference: ChangeReferenceModel | None
     commit_sha: str | None = None
+    failed_step: str | None = None
+
+
+def failed_step(manifest: DeploymentManifestModel) -> str | None:
+    """The step a failed or partial run stopped at: its first failed stage (docs/design/audit-trail.md, "Stages").
+    `None` for a run without one, including a record written before stages were."""
+    return next((stage.name for stage in manifest.stages or [] if stage.status == "failed"), None)
 
 
 def resolve_readable_sink(audit_config: AuditConfigModel | None) -> AuditGitSinkTargetModel:
@@ -114,7 +122,7 @@ def resolve_readable_sink(audit_config: AuditConfigModel | None) -> AuditGitSink
         raise UsageError(
             "No audit git sink is configured for this solution. Reading audit records ('strata audit "
             "status'/'strata audit changes') requires a configured 'git' audit sink, and none exists — "
-            "add one under spec.audit.sinks in your Configuration document. See docs/work/audit-trail.md "
+            "add one under spec.audit.sinks in your Configuration document. See docs/design/audit-trail.md "
             "and docs/design/audit-commands.md."
         )
     if len(git_sinks) > 1:
@@ -280,6 +288,7 @@ def list_latest_per_deployment(
             completed_at=manifest.completed_at or manifest.started_at,
             change_reference=manifest.change_reference,
             commit_sha=manifest.commit_sha,
+            failed_step=failed_step(manifest),
         )
         for manifest in sorted(latest_by_deployment.values(), key=lambda m: m.deployment)
     ]
@@ -347,6 +356,7 @@ def list_manifests_in_range(
             version=manifest.version or "unknown",
             change_reference=manifest.change_reference,
             commit_sha=manifest.commit_sha,
+            failed_step=failed_step(manifest),
         )
         for manifest in sorted(matches, key=lambda m: datetime.fromisoformat(m.started_at))
     ]

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Audit trail configuration models — `spec.audit` (docs/work/audit-trail.md).
+"""Audit trail configuration models — `spec.audit` (docs/design/audit-trail.md).
 
-Phase 1 of that doc's Layer 2 Implementation Plan: the config surface only —
+The config surface only —
 `AuditConfigModel`/`AuditSinkModel`/`AuditGitSinkTargetModel`. The written
 artifacts themselves (the deployment manifest, metrics record) are separate
 models (Phase 2), not config.
@@ -13,16 +13,15 @@ Deliberately not ported from v1's real `models/audit_config_model.py`:
   `REMOTES_DIRNAME`), and the per-execution directory shape is derived from
   a deployment's own `layers.segments` when declared, never a Jinja2
   template field. `journal` has no evidenced v2 consumer and is deferred
-  entirely. See the design doc's "Streamlining the configuration surface".
+  entirely. See the design doc's "Configuration".
 - No `deployments.ndjson` durable append series — real usage shows ~90% of
   deploys run in ephemeral CI, so a local-only append series never
   accumulates where it would matter; dropped rather than built and unused.
-  See "A third file".
+  See "Not covered".
 - `AuditPolicyModel`'s `Union[bool, AuditEventPolicyModel]` object wrapper is
   not ported — its extra fields were v1's own "reserved, not read by any
   producer yet". Flattened to `event_overrides: dict[str, bool] | None`
-  directly on `AuditConfigModel`. See "Event admission — a closed set gate,
-  not a policy framework".
+  directly on `AuditConfigModel`. See "Events".
 - The closed event-type set is scoped to what v2 actually produces
   (`deployment.completed`/`destroyed`/`measured`), not v1's full 20-type
   list spanning workitem/lock/drift/cost/secret producers v2 doesn't have.
@@ -33,13 +32,14 @@ Deliberately not ported from v1's real `models/audit_config_model.py`:
   deferred alongside the `integration` arm's dispatch itself.
 """
 
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from strata.models.common_models import PlatformBaseModel, PlatformKind, PlatformName
 from strata.models.reference_fields import References, RemoteReference
 from strata.utils.names import check_unique_names
+from strata.utils.path_safety import validate_not_option_like
 
 #: The closed set of event types v2 actually produces, each with its
 #: default enabled state. Not configurable — `event_overrides` may only
@@ -62,8 +62,7 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
 
     Distinct from `SourceModel.remote`'s read-oriented usage: `branch` is a
     mutable tip refreshed before every write, not a pinned `reference`. See
-    the design doc's "Durable push destination — why SolutionRemoteModel
-    can't be reused as-is".
+    the design doc's "The git sink".
     """
 
     remote: Annotated[PlatformName, RemoteReference()] = Field(
@@ -74,15 +73,36 @@ class AuditGitSinkTargetModel(PlatformBaseModel):
     branch: str = Field(
         min_length=1,
         description="Mutable branch this sink pushes to — distinct from the remote's own (read-pinned) "
-        "`reference`, refreshed (fetch + reset) immediately before every push.",
+        "`reference`. With a `reference` remote, strata's own clone is refreshed (fetch + reset) immediately "
+        "before every push; with a `path` remote, the pipeline's checkout is never reset, and the push names "
+        "this branch (`HEAD:<branch>`), so a detached checkout works.",
     )
     path: str = Field(
         min_length=1,
         description="Folder inside the repository under which each run's audit files are written.\n\n"
         "Design notes: Root prefix under the repository. The shared per-execution "
-        "relative path (see docs/work/audit-trail.md's 'Path resolution') is "
+        "relative path (see docs/design/audit-trail.md's 'Path resolution') is "
         "appended under this.",
     )
+    action: Literal["none", "commit", "push"] = Field(
+        default="push",
+        description="How far strata goes with the audit files: `push` (default) writes, commits and pushes; "
+        "`commit` writes and commits, and a later pipeline step pushes; `none` only writes the files, and a later "
+        "step commits and pushes. `commit` and `none` need a remote with a `path` (a checkout the pipeline made "
+        "and reads afterwards); with a `reference`, strata writes into its own clone, which nothing else reads.\n\n"
+        "Design notes: docs/design/remote-commit-provenance.md, 'Writing to a path remote'. With a path remote strata "
+        "writes in that "
+        "checkout, commits only the files it wrote, never resets, and pushes with the checkout's own credentials, "
+        "rebasing and retrying when the branch moved.",
+    )
+
+    @field_validator("branch")
+    @classmethod
+    def validate_branch(cls, v: str) -> str:
+        """A branch name is an argument to `git fetch`, `git clone` and `git push`, so it must not read as an option
+        (`--upload-pack=...` would run a command)."""
+        validate_not_option_like(v, "branch")
+        return v
 
 
 class AuditSinkModel(PlatformBaseModel):
@@ -91,7 +111,7 @@ class AuditSinkModel(PlatformBaseModel):
 
     Design notes:
     A configured audit event destination — exactly one of two structurally
-    different arms (docs/work/audit-trail.md's "The endpoints").
+    different arms (docs/design/audit-trail.md's "Sinks").
     """
 
     schema_rules: ClassVar[tuple[str, ...]] = (
@@ -108,8 +128,8 @@ class AuditSinkModel(PlatformBaseModel):
         "fails the run (exit code 3).\n\n"
         "Design notes: Same name/default as Integration.required. False (default): a "
         "dispatch failure warns but never fails the run. True: a dispatch failure "
-        "escalates to a hard failure (deploy run exit code 3). See 'Dispatch failure — "
-        "a required flag, not a binary silent-vs-fail choice'.",
+        "escalates to a hard failure (deploy run exit code 3). See docs/design/audit-trail.md, "
+        "'When delivery fails'.",
     )
     events: list[str] | None = Field(
         default=None, description="Event filter — None means every gate-admitted event type"
@@ -154,7 +174,7 @@ class AuditConfigModel(PlatformBaseModel):
 
     Design notes:
     `spec.audit` — fully optional; every field either derives a default or is dropped
-    (docs/work/audit-trail.md's "Streamlining the configuration surface").
+    (docs/design/audit-trail.md's "Configuration").
     """
 
     schema_rules: ClassVar[tuple[str, ...]] = (
@@ -172,6 +192,14 @@ class AuditConfigModel(PlatformBaseModel):
         "false}. Keys must already be in the closed event-type set.",
     )
     sinks: list[AuditSinkModel] | None = Field(default=None, description="Configured audit event destinations")
+    require_remote_commits: bool = Field(
+        default=False,
+        description="Fail `deploy run` when the build does not record a clean commit for the solution and for every "
+        "git remote it took files from. The build records each commit in `resolved.yaml`, and warns, whatever "
+        "this says; only the deploy fails, so building an uncommitted edit still works. A build made by a strata "
+        "without the record fails too.\n\n"
+        "Design notes: docs/design/remote-commit-provenance.md, '`spec.audit.require_remote_commits`'.",
+    )
 
     @model_validator(mode="after")
     def validate_known_event_types(self) -> "AuditConfigModel":

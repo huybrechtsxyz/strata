@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Resolve where a run's audit files land — the shared per-execution
 directory, reused by the local write and every push destination
-(docs/work/audit-trail.md's "Path resolution").
+(docs/design/audit-trail.md's "Path resolution").
 
-Phase 3 of that doc's Layer 2 Implementation Plan. Lives in `controllers/`
+Lives in `controllers/`
 (not `utils/`) because it needs a deployment's resolved `PathConventionModel`
 alongside the `DeploymentModel` itself — a cross-document lookup, same tier
 as `semantic_checks.py`.

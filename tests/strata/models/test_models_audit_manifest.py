@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the deployment manifest model — `_manifest.json` (docs/work/audit-trail.md).
-
-Phase 2 of that doc's Layer 2 Implementation Plan.
-"""
+"""Tests for the deployment manifest model — `_manifest.json` (docs/design/audit-trail.md)."""
 
 import pytest
 from pydantic import ValidationError
@@ -11,8 +8,8 @@ from strata.models.audit_manifest_model import (
     ChangeReferenceModel,
     DeploymentManifestModel,
     ManifestArtifactsModel,
+    ManifestPipelineModel,
     ManifestPlatformReferenceModel,
-    ManifestPullRequestModel,
     ManifestStageModel,
     ManifestStepModel,
 )
@@ -36,7 +33,6 @@ def test_minimal_manifest_is_valid():
     model = DeploymentManifestModel.model_validate(_minimal_manifest())
     assert model.execution_id == "11111111-1111-1111-1111-111111111111"
     assert model.status == "success"
-    assert model.force is False
     assert model.dry_run is False
 
 
@@ -59,23 +55,30 @@ def test_manifest_artifacts_platform_is_reference_only():
         DeploymentManifestModel.model_validate(data)
 
 
-def test_manifest_stage_with_steps_and_outputs_artifact():
+def test_manifest_stage_with_its_phases():
     data = _minimal_manifest(
         stages=[
             {
                 "name": "infrastructure",
+                "provisioner": "tf_main",
                 "status": "success",
                 "steps": [
-                    {"step": "init", "success": True, "duration_seconds": 1.5},
+                    {"step": "setup", "success": True, "duration_seconds": 1.5},
                     {"step": "apply", "success": True, "duration_seconds": 12.0},
                 ],
-                "outputs_artifact": {"path": "outputs.json", "sha256": "sha256:def"},
             }
         ]
     )
     model = DeploymentManifestModel.model_validate(data)
-    assert model.stages[0].steps[0].step == "init"
-    assert model.stages[0].outputs_artifact.sha256 == "sha256:def"
+    assert [step.step for step in model.stages[0].steps] == ["setup", "apply"]
+
+
+@pytest.mark.parametrize("field", ["outputs", "outputs_artifact", "topology"])
+def test_manifest_stage_carries_no_output_values_and_no_topology(field):
+    # docs/design/audit-trail.md, "Stages": output values stay in the output store.
+    stage = {"name": "infrastructure", "status": "success", field: {"x": "y"}}
+    with pytest.raises(ValidationError, match=field):
+        DeploymentManifestModel.model_validate(_minimal_manifest(stages=[stage]))
 
 
 def test_manifest_stage_skipped_requires_no_skip_reason_but_accepts_one():
@@ -84,9 +87,9 @@ def test_manifest_stage_skipped_requires_no_skip_reason_but_accepts_one():
     assert model.stages[0].skip_reason == "enabled: false"
 
 
-def test_manifest_pull_request_and_change_reference_are_independent_optional_fields():
+def test_manifest_change_reference_is_optional():
+    assert DeploymentManifestModel.model_validate(_minimal_manifest()).change_reference is None
     data = _minimal_manifest(
-        pull_request={"number": 42, "title": "Fix thing", "author": "octocat"},
         change_reference={
             "system": "jira",
             "id": "OPS-1234",
@@ -96,15 +99,36 @@ def test_manifest_pull_request_and_change_reference_are_independent_optional_fie
         },
     )
     model = DeploymentManifestModel.model_validate(data)
-    assert model.pull_request.number == 42
     assert model.change_reference.id == "OPS-1234"
 
 
-def test_manifest_actor_kept_distinct_from_commit_author():
-    data = _minimal_manifest(deployed_by="ci-runner", commit_author="jane.doe")
-    model = DeploymentManifestModel.model_validate(data)
+def test_manifest_pipeline_needs_a_system_and_a_run_id_only():
+    model = DeploymentManifestModel.model_validate(
+        _minimal_manifest(pipeline={"system": "azure_devops", "run_id": "4711"})
+    )
+    assert model.pipeline == ManifestPipelineModel(system="azure_devops", run_id="4711")
+    with pytest.raises(ValidationError, match="system"):
+        DeploymentManifestModel.model_validate(_minimal_manifest(pipeline={"system": "jenkins", "run_id": "1"}))
+
+
+def test_manifest_records_who_ran_the_deploy():
+    model = DeploymentManifestModel.model_validate(_minimal_manifest(deployed_by="ci-runner"))
     assert model.deployed_by == "ci-runner"
-    assert model.commit_author == "jane.doe"
+
+
+@pytest.mark.parametrize(
+    "field", ["commit_author", "commit_message", "pull_request", "outputs", "signatures", "metadata"]
+)
+def test_manifest_drops_the_fields_nothing_could_fill(field):
+    # docs/design/audit-trail.md, "The audit files". None was ever written, so no existing manifest holds one.
+    with pytest.raises(ValidationError, match=field):
+        DeploymentManifestModel.model_validate(_minimal_manifest(**{field: "x"}))
+
+
+def test_a_manifest_written_before_force_was_removed_still_loads():
+    """`force` defaulted to `False`, so every older manifest holds `"force": false`; it is dropped on read."""
+    model = DeploymentManifestModel.model_validate(_minimal_manifest(force=False))
+    assert "force" not in model.model_dump()
 
 
 def test_manifest_providers_carry_the_tool_version_and_path_and_both_are_optional():
@@ -121,6 +145,25 @@ def test_manifest_providers_carry_the_tool_version_and_path_and_both_are_optiona
     assert provider.tool_version == "4.3.1" and provider.tool_path == "/bin/helm"
 
 
+def test_manifest_commit_dirty_and_repository_dirty_are_optional():
+    """docs/design/remote-commit-provenance.md, "The audit manifest copies the record": a manifest written before the
+    build record still loads."""
+    platform = {"platform": {"hash": "sha256:abc", "path": "resolved.yaml"}}
+    old = _minimal_manifest(
+        commit_sha="5d0e", artifacts={**platform, "repositories": {"infra": {"url": "u", "commit": "3f9c"}}}
+    )
+    new = _minimal_manifest(
+        commit_sha="5d0e",
+        commit_dirty=True,
+        artifacts={**platform, "repositories": {"infra": {"url": "u", "commit": "3f9c", "dirty": False}}},
+    )
+
+    model = DeploymentManifestModel.model_validate(old)
+    assert model.commit_dirty is None and model.artifacts.repositories["infra"].dirty is None
+    model = DeploymentManifestModel.model_validate(new)
+    assert model.commit_dirty is True and model.artifacts.repositories["infra"].dirty is False
+
+
 def test_manifest_rejects_unknown_field():
     data = _minimal_manifest(unexpected_field="nope")
     with pytest.raises(ValidationError):
@@ -131,7 +174,7 @@ def test_manifest_sub_models_importable_directly():
     """Sanity check the module's public sub-model surface is stable and importable."""
     assert ManifestArtifactsModel is not None
     assert ManifestPlatformReferenceModel is not None
-    assert ManifestPullRequestModel is not None
+    assert ManifestPipelineModel is not None
     assert ManifestStageModel is not None
     assert ManifestStepModel is not None
     assert ChangeReferenceModel is not None

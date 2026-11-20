@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Push audit files to a durable git destination — the `git` sink arm's
-transport (docs/work/audit-trail.md's "Durable push destination"/"The
-endpoints").
+transport (docs/design/audit-trail.md's "The
+git sink").
 
-Phase 4 of that doc's Layer 2 Implementation Plan. A new, push-specific
+A new, push-specific
 resolution — deliberately NOT reusing `resolve_remote()`
 (`controllers/remote_resolution.py`):
 
@@ -58,8 +58,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from strata.controllers.checkout_state import checkout_state
 from strata.controllers.git_checkout import ensure_synced_checkout
-from strata.integrations.git_push import credential_env
+from strata.integrations.git_push import commit_in_checkout, credential_env
 from strata.models.audit_model import AuditGitSinkTargetModel
 from strata.models.auth_models import AuthenticationModel
 from strata.models.solution_model import RemoteType, SolutionModel
@@ -114,8 +115,15 @@ def push_audit_files(
             False, f"remote '{remote.name}' has type '{remote.type.value}', but an audit push needs 'git'"
         )
     if remote.path is not None:
+        # A checkout the pipeline made: written in place, never cloned or reset, its own credentials.
+        return _write_in_checkout(
+            layout.path_remote_location(root, remote.path), sink, files, relative_path, actor, remote.name
+        )
+    if sink.action != "push":
         return PushResult(
-            False, f"remote '{remote.name}' has a 'path', which strata only reads; an audit push needs a 'reference'"
+            False,
+            f"action '{sink.action}' needs a remote with a 'path': remote '{remote.name}' has a 'reference', so "
+            "strata writes into its own clone, which nothing else reads, and only a push keeps the files",
         )
 
     checkout_path = layout.audit_push_checkout_path(root, remote.name, sink.branch)
@@ -157,6 +165,55 @@ def push_audit_files(
             return PushResult(False, f"'git push' failed: {push_result.stderr.strip()}")
 
     return PushResult(True)
+
+
+def _write_in_checkout(
+    checkout: Path,
+    sink: AuditGitSinkTargetModel,
+    files: dict[str, Path],
+    relative_path: Path,
+    actor: str,
+    remote_name: str,
+) -> PushResult:
+    """Write `files` into a path remote's checkout, then go as far as `sink.action` says.
+
+    docs/design/remote-commit-provenance.md, "Writing to a path remote". The checkout is the pipeline's, so strata:
+
+    - never clones, resets or checks out a branch, and works with a detached `HEAD` (the push names the branch);
+    - commits only the files it wrote (`git commit -- <files>`); anything else modified, staged or untracked in
+      the tree stays as it was;
+    - passes the commit identity per command (`git -c user.name=...`) instead of writing it to the checkout's
+      config;
+    - pushes with the checkout's own credentials (for example Azure DevOps `persistCredentials: true`). A path
+      remote has no `integration`.
+
+    The commit and push, with its rebase and retry, is `git_push.commit_in_checkout()`, shared with a GitOps step.
+    Each deploy writes under its own path, so a rebase conflict means two deploys wrote the same audit path.
+    """
+    state = checkout_state(checkout)
+    if state.commit is None:
+        return PushResult(False, f"remote '{remote_name}': {state.problem}, so the audit files cannot be written there")
+
+    dest_dir = checkout / sink.path / relative_path
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for filename, source_path in files.items():
+        (dest_dir / filename).write_bytes(source_path.read_bytes())
+        written.append((dest_dir / filename).relative_to(checkout).as_posix())
+    if sink.action == "none":
+        return PushResult(True, f"written to '{dest_dir}', not committed (action: none)")
+
+    result = commit_in_checkout(
+        checkout,
+        written,
+        f"audit: {relative_path.as_posix()}",
+        actor=actor,
+        email_domain="strata-audit.local",
+        branch=sink.branch if sink.action == "push" else None,
+    )
+    if result.success and sink.action == "commit":
+        return PushResult(True, f"{result.detail} (action: commit)")
+    return PushResult(result.success, result.detail)
 
 
 def _configure_identity(checkout_path: Path, actor: str, *, env: Mapping[str, str] | None = None) -> PushResult:

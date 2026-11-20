@@ -61,8 +61,8 @@ def test_every_cited_doc_exists():
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("see docs/work/audit-trail.md's 'Path resolution'", ["work/audit-trail.md"]),
-        ("(docs/work/remotes.md#fetch-modes).", ["work/remotes.md"]),
+        ("see docs/work/promotion.md's 'Path resolution'", ["work/promotion.md"]),
+        ("(docs/work/version-lifecycle.md#fetch-modes).", ["work/version-lifecycle.md"]),
         ("Ends a sentence: docs/README.md.", ["README.md"]),
         ('"""Helpers (docs/design/\nsbom-generation.md Phase 1)."""', ["design/sbom-generation.md"]),
         ("# placement (docs/archive/\n# checkov-integration.md Phase 1).", ["archive/checkov-integration.md"]),

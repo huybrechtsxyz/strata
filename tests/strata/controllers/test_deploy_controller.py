@@ -17,6 +17,7 @@ import yaml
 
 from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import check_build_version, deploy_run, tf_var_env
+from strata.controllers.deploy_stage_log import StageLog
 from strata.controllers.solution_context import open_solution
 from strata.integrations.base import ReadinessProblem
 from strata.integrations.helm import HelmIntegration, _repo_alias
@@ -745,7 +746,7 @@ def test_deploy_run_only_resolves_credentials_for_remotes_a_module_pulls_from(tm
 def test_deploy_run_refuses_a_registry_chart_the_build_did_not_pin(tmp_path: Path, monkeypatch):
     root = _proget_solution(tmp_path)
     build_path, build_diagnostics = _build_apps(root, tmp_path)
-    assert [item.code for item in build_diagnostics.items] == ["helm_chart_not_pinned"]
+    assert [item.code for item in build_diagnostics.items] == ["helm_chart_not_pinned"], build_diagnostics.messages()
     calls = _fake_helm_calls(monkeypatch)
 
     diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
@@ -770,7 +771,9 @@ def test_deploy_run_refuses_a_local_chart_whose_dependency_the_build_did_not_pin
         "  - name: redis\n    version: 19.0.1\n    repository: https://charts.example.com\n",
     )
     build_path, build_diagnostics = _build_apps(root, tmp_path)
-    assert [item.code for item in build_diagnostics.items] == ["helm_chart_dependency_not_pinned"]
+    assert [item.code for item in build_diagnostics.items] == ["helm_chart_dependency_not_pinned"], (
+        build_diagnostics.messages()
+    )
     calls = _fake_helm_calls(monkeypatch)
 
     diagnostics = deploy_run(_context(root), "app", build_path, force=True, stages=("deploy_apps",))
@@ -2064,6 +2067,88 @@ def test_a_flags_only_problem_is_a_warning_under_destroy_and_the_step_runs(tmp_p
     assert "tf_flags" in [w.code for w in diagnostics.warnings]
     assert "tf_flags" not in [e.code for e in diagnostics.errors]
     assert len(tools) == 1 and any("destroy" in call for call in calls)
+
+
+# ---------------------------------------------------------------------------
+# stage_log — the audit manifest's `stages` (docs/design/audit-trail.md, "Stages")
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.slow
+def test_deploy_run_logs_each_step_with_its_phases(tmp_path: Path, monkeypatch):
+    root, build_path, _, stubs = _versioned_terraform(tmp_path, "1.9.2", second_step=True)
+    _install(monkeypatch, stubs)
+    log = StageLog()
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage_log=log)
+
+    assert diagnostics.ok, diagnostics.messages()
+    stages = log.stages(diagnostics)
+    assert [(s.name, s.provisioner, s.status) for s in stages] == [
+        ("apply_infra", "tf_main", "success"),
+        ("apply_apps", "tf_main", "success"),
+    ]
+    for stage in stages:
+        assert [(p.step, p.success) for p in stage.steps] == [
+            ("setup", True),
+            ("check", True),
+            ("plan", True),
+            ("apply", True),
+        ]
+        assert stage.started_at and stage.completed_at and stage.duration_seconds is not None
+
+
+@pytest.mark.slow
+def test_a_step_that_fails_to_apply_fails_its_stage_and_skips_the_rest(tmp_path: Path, monkeypatch):
+    root, build_path, _, (base_module, fake) = _versioned_terraform(tmp_path, "1.9.2", second_step=True)
+
+    def _apply_fails(args, **kwargs):
+        if "apply" in args:
+            return CommandResult(returncode=1, stdout="", stderr="quota exceeded")
+        return fake(args, **kwargs)
+
+    _install(monkeypatch, (base_module, _apply_fails))
+    log = StageLog()
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage_log=log)
+
+    infra, apps = log.stages(diagnostics)
+    assert infra.status == "failed"
+    assert [(p.step, p.success) for p in infra.steps] == [
+        ("setup", True),
+        ("check", True),
+        ("plan", True),
+        ("apply", False),
+    ]
+    assert any("deploy failed" in error for error in infra.errors)
+    assert (apps.status, apps.skip_reason, apps.steps) == ("skipped", "an earlier step failed", None)
+
+
+@pytest.mark.slow
+def test_a_preflight_failure_fails_the_step_it_names_and_runs_nothing(tmp_path: Path, monkeypatch):
+    root, build_path, _, stubs = _versioned_terraform(tmp_path, "1.5.7")
+    _install(monkeypatch, stubs)
+    log = StageLog()
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, stage_log=log)
+
+    [stage] = log.stages(diagnostics)
+    assert (stage.name, stage.status, stage.steps, stage.started_at) == ("apply_infra", "failed", None, None)
+    assert stage.errors and "does not satisfy" in stage.errors[0]
+
+
+@pytest.mark.slow
+def test_a_destroy_logs_its_destroy_phase(tmp_path: Path, monkeypatch):
+    root, build_path, _, stubs = _versioned_terraform(tmp_path, "1.9.2")
+    _install(monkeypatch, stubs)
+    log = StageLog()
+
+    diagnostics = deploy_run(_context(root), "app", build_path, force=True, destroy=True, stage_log=log)
+
+    assert diagnostics.ok, diagnostics.messages()
+    [stage] = log.stages(diagnostics)
+    assert stage.status == "success"
+    assert [p.step for p in stage.steps] == ["setup", "destroy"]
 
 
 @pytest.mark.slow

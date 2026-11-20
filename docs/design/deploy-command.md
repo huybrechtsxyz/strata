@@ -458,7 +458,7 @@ selects and orders them, for a pipeline to plan its jobs; see
 - [value-token-resolution.md](value-token-resolution.md) — the Value
   Supply Mechanisms A/B/C taxonomy; Mechanism B is the deploy-time-only
   resolver this doc's token substitution uses.
-- `audit-trail.md` (work doc) — Layer 2's audit
+- [audit-trail.md](audit-trail.md) — Layer 2's audit
   manifest/metrics models, already `destroy`-aware; `deploy destroy`
   extends the existing glue, not the models
   ([deploy-destroy.md](deploy-destroy.md)).

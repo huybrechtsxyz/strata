@@ -3,8 +3,8 @@
 remote ref (docs/design/audit-commands.md's "Read mechanism — reuse, not
 reimplement, the push side's fetch+reset").
 
-Extracted from `audit_push.py`'s own private `_ensure_checkout()` (Phase 4 of
-audit-trail.md's Layer 2 Implementation Plan) once a second caller needed the
+Extracted from `audit_push.py`'s own private `_ensure_checkout()` (docs/design/audit-trail.md,
+"The git sink") once a second caller needed the
 exact same behaviour: `strata audit status`'s read-only checkout
 (docs/design/audit-commands.md's Phase 3, `controllers/audit_read.py`) needs
 the identical clone/fetch/reset sequence, with none of `audit_push.py`'s

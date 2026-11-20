@@ -4,10 +4,10 @@
   `strata sln init`/`strata sln update` are real, working CLI commands
   (`ScaffoldController`, `scaffold_templates.py`, the two ported
   templates + `.strata/README.md`, wired into `cli.py`), cross-linked
-  from `audit-trail.md` (work doc) and
+  from [audit-trail.md](audit-trail.md) and
   [v2-schema-overview.md](v2-schema-overview.md).
 - Date: 2026-09-30
-- Related: `audit-trail.md` (work doc) (Layer 1 — PR
+- Related: [audit-trail.md](audit-trail.md) (Layer 1 — PR
   template + extraction — is this design's motivating, first real
   consumer), [ADR-0015](../decisions/0015-solution-manifest-and-document-discovery.md)
   (`strata.yaml` — v2's own, different bootstrap document from v1's
@@ -18,7 +18,7 @@
 
 ## Problem
 
-the work doc `audit-trail.md`'s real-usage scoping (2026-09-30) found
+[audit-trail.md](audit-trail.md)'s real-usage scoping (2026-09-30) found
 Layer 1 (PR template + issue template scaffolding) is real and active in
 `config-repo` today — `.github/pull_request_template.md` and
 `.github/ISSUE_TEMPLATE/deployment-change-request.yml` both exist,

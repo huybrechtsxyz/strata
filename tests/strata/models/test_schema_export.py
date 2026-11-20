@@ -60,6 +60,14 @@ def test_reflow_joins_the_wrapped_continuation_of_a_list_item():
     assert reflow(text) == "Pick one:\n\n- first item that wraps onto a second line\n- second item"
 
 
+@pytest.mark.parametrize("depends_on", ["r2", ["r2", "r3"]])
+def test_a_resources_depends_on_may_be_one_name_in_the_editor_schema_too(depends_on):
+    """The model coerces `depends_on: r2` to a list; the exported schema must accept what the model accepts."""
+    schema = export_schema(_model_of(PlatformKind.WORKSPACE), PlatformKind.WORKSPACE)
+    resource_schema = {**schema["$defs"]["WorkspaceResourceModel"], "$defs": schema["$defs"]}
+    jsonschema.validate({"name": "r1", "resource": "r1", "depends_on": depends_on}, resource_schema)
+
+
 def test_a_scalar_shorthand_model_keeps_its_description_and_rules_on_the_wrapper():
     from pydantic import ConfigDict
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Tests for rendering the audit CloudEvents+ECS envelope (docs/work/audit-trail.md's
-"The audit files — ... the Event is rendered, not written").
-
-Phase 2 of that doc's Layer 2 Implementation Plan.
+"""Tests for rendering the audit CloudEvents+ECS envelope (docs/design/audit-trail.md's
+"The audit files").
 """
 
 import uuid
+
+import pytest
 
 from strata.controllers.audit_event_rendering import render_manifest_event, render_metrics_event
 from strata.models.audit_manifest_model import DeploymentManifestModel
@@ -109,6 +109,18 @@ def test_render_metrics_event_shape():
     assert event["data"]["event"]["action"] == "deployment-measured"
     assert event["data"]["event"]["outcome"] == "success"
     assert event["data"]["user"]["name"] == "ci-runner"
+
+
+@pytest.mark.parametrize(("status", "outcome"), [("success", "success"), ("failed", "failure"), ("partial", "failure")])
+def test_the_event_outcome_uses_the_ecs_values(status, outcome):
+    # ECS allows success, failure and unknown; the manifest the event points to keeps `partial`.
+    event = render_manifest_event(_manifest(status=status), relative_path="p", file_sha256="h")
+    assert event["data"]["event"]["outcome"] == outcome
+
+
+def test_a_failed_metrics_event_says_failure():
+    metrics = _metrics(dimensions={"outcome": "failed", "action": "deploy"})
+    assert render_metrics_event(metrics, relative_path="p", file_sha256="h")["data"]["event"]["outcome"] == "failure"
 
 
 def test_render_metrics_event_omp_api_version_uses_omp_type_prefix():

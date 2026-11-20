@@ -102,7 +102,7 @@ class StoreIntegration(Integration):
 
 #: Reserved `KeyValueStoreIntegration.put(if_version=...)` sentinel meaning
 #: "this key must not already exist" — the create-only guard a lock's first
-#: acquire needs (docs/work/key-value-store-integration.md's "Validated
+#: acquire needs (docs/design/key-value-store-integration.md's "Validated
 #: reuse" section), distinct from an ordinary value meaning "must still
 #: equal this known version." Matches Consul's/etcd's own documented CAS
 #: convention (a nonexistent key's ModifyIndex/mod_revision is `0`) exactly;
@@ -114,7 +114,7 @@ NEW_KEY_VERSION = "0"
 class KeyValueStoreIntegration(Integration):
     """Capability: `key_value`. Raw get/put of a single small value by key,
     with optional compare-and-swap via a backend-returned version tag
-    (docs/work/key-value-store-integration.md).
+    (docs/design/key-value-store-integration.md).
 
     Deliberately not a `StoreIntegration` (`resolve(key) -> str`, no
     version concept at all) — a real shape mismatch for "read/write a
@@ -134,7 +134,7 @@ class KeyValueStoreIntegration(Integration):
     #: create-then-update-then-reacquire lifecycle would be another) **must
     #: check this before ever calling `put(if_version=...)`**, not just
     #: handle the resulting exception — the one known `False` case
-    #: (`AzureKeyVaultResolver`, docs/work/key-value-store-integration.md's
+    #: (`AzureKeyVaultResolver`, docs/design/key-value-store-integration.md's
     #: Backend 7) still raises `IntegrationError` from `put()` itself if
     #: called anyway, but silently discovering that via a runtime exception
     #: (or, worse, a caller that swallows it as a warning, the way
@@ -146,7 +146,7 @@ class KeyValueStoreIntegration(Integration):
     #: `if_version=NEW_KEY_VERSION` (create-only) *and* `if_version=<a real
     #: prior version>` (update-only-if-unchanged) are genuinely honored —
     #: a backend supporting only the create-only case (the file backend's
-    #: planned design, docs/work/key-value-store-integration.md's Backend 1:
+    #: planned design, docs/design/key-value-store-integration.md's Backend 1:
     #: a real atomic create via `O_EXCL`, but no atomic primitive at all for
     #: an *existing* key) is not "supports CAS" for this flag's purpose,
     #: since `DeploymentOutputStore.record()` needs the update case on

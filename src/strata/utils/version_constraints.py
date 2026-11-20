@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Version constraints for `IntegrationModel.spec.version` (docs/work/integration-readiness.md D3).
+"""Version constraints for `IntegrationModel.spec.version` (docs/design/integration-readiness.md, "Version constraints").
 
 PEP 440 specifiers, plus Terraform's `~>`: `~> 1.9` means `>= 1.9, < 2.0`, which is exactly PEP 440's
 `~= 1.9`, so it is read as that.

@@ -7,7 +7,7 @@ Status: implemented
 `TerraformIntegration.default_output()` is missing four of v1's real output
 categories: `features`/`variables`/`properties`/`custom`. Found while
 investigating the `OutputProfileModel`/`emits` revisit (see
-the work doc `build-command.md`'s `default_output()` table), which is
+[build-command.md](build-command.md)'s history; since archived, see ADR-0035), which is
 blocked on this: `emits` can't gate categories that don't exist yet.
 
 **Important correction:** the gap is *not* "`resolved.values` is silently
@@ -346,7 +346,7 @@ translation.
 
 The **only** network calls `build run` is allowed to make are `sync_source()`'s
 own — fetching remote `git`/`helm`/`oci` sources so they exist locally to
-build from (ADR-0022/`remotes.md`). That's fetching *inputs* (source code,
+build from (ADR-0022/[remotes.md](remotes.md)). That's fetching *inputs* (source code,
 charts), not *resolving values* — a different thing that happens to also be
 network I/O.
 
@@ -423,7 +423,7 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
 - [ADR-0022](../decisions/0022-strata-build-run.md) D1a — `ValueResolution` contract (flat, stringified, secrets-excluded).
 - [ADR-0023](../decisions/0023-build-output-rendering.md) D3/D5 — `default_output()` dispatch, `output.template` escape hatch (later phase).
 - [ADR-0024](../decisions/) — tenant-defaults merge (`merge_deployment_specs()`), the only `properties`/`custom` merge that exists today.
-- `build-command.md` (work doc) — tracks the original gap and the `OutputProfileModel` dependency.
+- [build-command.md](build-command.md) — the build this feeds; its History records the original gap and the `OutputProfileModel` dependency.
 - [provisioning-injection-model.md](../archive/provisioning-injection-model.md) — Context lifetime, build-time vs. deploy-time split.
 - `lifecycle.md` (removed work doc; its open items are GitHub issues) — sibling, NOT the same design: same source data, translated to script env vars instead of tfvars JSON.
 - [deployment-tier-resource-sizing.md](deployment-tier-resource-sizing.md) —

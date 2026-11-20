@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `strata integration check` (docs/work/integration-readiness.md D9-D13).
+"""Tests for `strata integration check` (docs/design/integration-readiness.md).
 
 Runs the real Aikido and Terraform integrations with their HTTP transport / subprocess replaced, so no
 network or real tool is touched.
@@ -429,3 +429,12 @@ def test_unknown_name_is_two_and_lists_declared_names_and_known_types(tmp_path, 
     assert result.exit_code == EXIT_USAGE, result.output
     assert "'nope' is not declared and is not a known integration type" in result.output
     assert "aikido-ci" in result.output and "terraform" in result.output
+    assert "not yet ported" not in result.output
+
+
+def test_an_undeclared_v1_type_says_it_is_not_ported_yet(tmp_path, http):
+    """`ansible` is real, not a typo: the same hint a declared `type: ansible` document gets."""
+    result = _check(_solution(tmp_path), "ansible")
+    assert result.exit_code == EXIT_USAGE, result.output
+    assert "'ansible' is not declared and is not a known integration type" in result.output
+    assert "It is a v1 integration type not yet ported to v2." in result.output

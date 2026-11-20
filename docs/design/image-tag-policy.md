@@ -100,7 +100,9 @@ selected and whose name is not allowed:
 `chart`), and an info finding, `image_tag_policy_rendered_images`, names that file and when it was written. The
 result is a `ManifestPolicyResultModel` (`policy_name: image_tag_policy`, `policy_type: image_tag`) in
 `policy_results.json`, and the audit manifest picks it up. `build run` writes it with the other build-phase
-results at the end, a denied build's included.
+results at the end, a denied build's included. A denied build writes no audit manifest (only a deploy does), so its
+result stays in that file; a denied `deploy run` writes a `failed` manifest that carries it
+([security-gates.md](security-gates.md), "6.5 Policy results").
 
 ### Version documents
 
@@ -132,7 +134,7 @@ is nothing honest to seed it with.
 - A workspace is shared by every ring, so it cannot be strict on prd and lenient on dev by itself. A `rings`
   selector on the policy, using the ring of the deployment's version document, was chosen over a per-deployment
   override, which would be a new mechanism for every policy and cuts across the "rebind only, no field patches"
-  rule in `workspace-overrides.md` (work doc). A deployment with no ring is judged (fail
+  rule in [workspace-overrides.md](workspace-overrides.md). A deployment with no ring is judged (fail
   closed).
 - "Floating" is the explicit alias list, not "anything that is not a semantic version" as the SBOM treats a
   declared tag: a strict default trains people to switch the policy to `warn`. `tag_pattern` is the opt-in for more.
@@ -142,8 +144,11 @@ is nothing honest to seed it with.
   denied build recorded no result in `policy_results.json`. Since 2026-11-12 it judges at the end, after the
   SBOM, so it also sees the images rendered charts run ([helm-image-delivery.md](helm-image-delivery.md)), and a
   denied build records its result. To fail fast, run `strata deploy images` or `strata policy check` before
-  `build run`: both judge the declared images offline in seconds. Whether a denied build should reach the
-  audit trail is tracked in `denied-build-audit.md` (work doc).
+  `build run`: both judge the declared images offline in seconds.
+- A denied build is not sent to the audit trail. Recording a `build` manifest on denial was considered, for a
+  reviewer asking "every time the gate stopped something", but nobody has asked for that, and it would add a producer
+  and a failed-build record in every sink. The audit trail records changes to an environment; the CI log records
+  the denied attempt.
 - `deploy images` used to only warn on a missing tag and said nothing about `latest`. With the policy set it now
   fails on `deny`; without the policy it behaves as before.
 - Both origins are covered by default, so an untagged third-party module image such as `redis` is flagged, which is

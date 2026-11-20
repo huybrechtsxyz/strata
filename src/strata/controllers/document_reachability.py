@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which documents no deployment reaches (docs/work/unreferenced-documents.md).
+"""Which documents no deployment reaches (docs/design/unreferenced-documents.md).
 
 A document that no deployment reaches through any reference is either a leftover, a mistyped name somewhere, or
 staged ahead of its first use. `strata validate` reports it as information, `document_unreferenced`, so
@@ -149,7 +149,7 @@ def unused_bases(index: DocumentIndex) -> list[IndexEntry]:
 
 
 def check_unused_bases(index: DocumentIndex) -> Diagnostics:
-    """`base_unused` (information): a `partial: true` base nothing extends (docs/work/unreferenced-documents.md).
+    """`base_unused` (information): a `partial: true` base nothing extends (docs/design/unreferenced-documents.md).
 
     A base exists only to be extended, so one nothing extends does nothing: a leftover, or a leaf that names
     another base by mistake. A base extended only by another base that nothing extends is not reported itself;

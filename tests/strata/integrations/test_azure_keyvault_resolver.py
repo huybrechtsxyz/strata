@@ -214,7 +214,7 @@ def test_metadata_raises_integration_error_on_a_real_azure_failure(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# get() / put() — KeyValueStoreIntegration (docs/work/key-value-store-
+# get() / put() — KeyValueStoreIntegration (docs/design/key-value-store-
 # integration.md's Backend 7)
 # ---------------------------------------------------------------------------
 

@@ -94,7 +94,7 @@ citation of one has to follow it. Two guard tests keep that true:
 - **Between docs.** `tests/repo/test_doc_links.py` checks every relative
   `.md` link in the repository's Markdown (outside code): it must resolve,
   and it must not go from outside `docs/work/` into it. Only a work doc links
-  to a work doc; anywhere else, name it without a link: `` `audit-trail.md`
+  to a work doc; anywhere else, name it without a link: `` `promotion.md`
   (work doc) ``.
 
 When a doc moves or merges into another, update its citations in the same

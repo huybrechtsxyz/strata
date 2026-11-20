@@ -12,7 +12,7 @@ why: an IaC directory in, a completely different findings model out, is a
 genuinely different input/output shape from an SBOM file in.
 
 Built with no document by default (`shutil.which("checkov")` is all strata
-needs). Since docs/work/integration-readiness.md Phase 8 a solution can also
+needs). Since docs/design/integration-readiness.md ("Local tools as declarable integrations") a solution can also
 declare `type: checkov`; `checkov_controller` then binds that document, so
 `spec.command`/`spec.version`/`spec.required` apply like any local tool.
 """

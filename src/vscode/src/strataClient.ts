@@ -34,7 +34,7 @@ export interface Diagnostic {
     source?: string;
     location?: string;
     code?: string;
-    /** What to do about it, when strata knows (docs/work/diagnostic-guidance.md). */
+    /** What to do about it, when strata knows (docs/design/diagnostic-guidance.md). */
     hint?: string;
 }
 

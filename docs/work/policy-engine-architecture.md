@@ -216,7 +216,7 @@ once at least one real policy type exists to compare against).
    and every future policy type. Building a scheduler now, before any
    real adopter has asked for the one thing it would uniquely provide
    (next paragraph), would be exactly the "declared-but-unread machinery"
-   anti-pattern [audit-trail.md](audit-trail.md)'s own "Lessons from v1's
+   anti-pattern [audit-trail.md](../design/audit-trail.md)'s own "Lessons from v1's
    own defects" #1 warns against, just applied to the policy layer
    instead of audit.
 

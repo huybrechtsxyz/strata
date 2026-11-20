@@ -10,7 +10,7 @@
   `deployment_model.py`'s `DeploymentLayersModel` (now cross-checked, was
   **inert in v2** before this design), `tenant_model.py` (already solved
   `zones` differently — the same "convert cleanly, not 1:1" discipline
-  applies here), `solution-loading-and-phase2-validation.md` (work doc)
+  applies here), [solution-loading-and-phase2-validation.md](solution-loading-and-phase2-validation.md)
   (the Phase 2 check registry this adds one more entry to)
 
 ## Problem — real, concrete evidence from `config-repo`

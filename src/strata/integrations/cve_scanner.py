@@ -19,7 +19,7 @@ Doesn't fit `Integration.command`'s normal one-executable-per-class
 resolution (ADR-0021 D6): with no Integration document, this integration
 picks between two entirely different CLIs at runtime (detected once per
 instance) - so `command` is overridden below rather than relying on
-`COMMAND`. Since docs/work/integration-readiness.md Phases 6-7 a solution
+`COMMAND`. Since docs/design/integration-readiness.md ("Local tools as declarable integrations") a solution
 can also declare `type: trivy` or `type: grype` (`TrivyIntegration`,
 `GrypeIntegration` below): the backend is then fixed by the document, and
 `spec.command`/`spec.version`/`spec.required` apply like any local tool.
@@ -223,7 +223,7 @@ class CveScannerIntegration(ScannerIntegration):
 
 
 class TrivyIntegration(CveScannerIntegration):
-    """`type: trivy` - the CVE scanner fixed to Trivy (docs/work/integration-readiness.md Phase 6)."""
+    """`type: trivy` - the CVE scanner fixed to Trivy (docs/design/integration-readiness.md)."""
 
     TYPE = "trivy"
     COMMAND = "trivy"
@@ -233,7 +233,7 @@ class TrivyIntegration(CveScannerIntegration):
 
 
 class GrypeIntegration(CveScannerIntegration):
-    """`type: grype` - the CVE scanner fixed to Grype (docs/work/integration-readiness.md Phase 7)."""
+    """`type: grype` - the CVE scanner fixed to Grype (docs/design/integration-readiness.md)."""
 
     TYPE = "grype"
     COMMAND = "grype"

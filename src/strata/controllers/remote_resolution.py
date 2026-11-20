@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolving a `SolutionRemoteModel` to a real filesystem path (docs/work/remotes.md).
+"""Resolving a `SolutionRemoteModel` to a real filesystem path (docs/design/remotes.md).
 
 **Why the checkout path never needs a stored side-file.**
 `layout.remote_checkout_path(root, remote, reference)` is a pure function of
@@ -95,7 +95,7 @@ def resolve_remote(
         ValueError: `credentials` is given together with `auth` or `resolved_values`.
         RemoteResolutionError: `fetch: external` (or a remote's `path`) names a
             path nothing has checked out yet, the remote's `type` has no fetch mechanism
-            built (`oci`/`helm` — see docs/work/remotes.md), or the git
+            built (`oci`/`helm` — see docs/design/remotes.md), or the git
             clone/checkout itself failed.
     """
     if credentials is not None and (auth is not None or resolved_values is not None):
@@ -113,7 +113,7 @@ def resolve_remote(
     if remote.path is not None:
         # A path remote is wherever the pipeline put it — never under
         # .strata/remotes/, never cloned, and not moved by `checkout_path`
-        # (docs/work/remote-external-path.md).
+        # (docs/design/remotes.md, "Resolution").
         located = layout.path_remote_location(root, remote.path)
         if not located.exists():
             raise RemoteResolutionError(
@@ -144,7 +144,7 @@ def resolve_remote(
     if remote.type != RemoteType.GIT:
         raise RemoteResolutionError(
             f"Remote '{remote.name}' has type '{remote.type.value}', which strata cannot fetch "
-            "yet (only 'git' is implemented) — see docs/work/remotes.md."
+            "yet (only 'git' is implemented) — see docs/design/remotes.md."
         )
 
     if credentials is not None:

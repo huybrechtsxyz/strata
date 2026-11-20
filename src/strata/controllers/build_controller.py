@@ -63,6 +63,7 @@ from strata.controllers.sbom_controller import evaluate_cve_policy, write_sbom
 from strata.controllers.security_gate_controller import built_commit_sha
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.source_record import SourceRecord
 from strata.controllers.source_sync import (
     SourceSyncError,
     describe_source,
@@ -337,6 +338,7 @@ def write_resolved_manifest(
     *,
     pinned_by: str = "spec.version",
     targets: set[tuple[str, str]] | None = None,
+    provenance: dict[str, Any] | None = None,
 ) -> Path:
     """Write `build_path/resolved.yaml` (docs/design/build-time-value-categories.md,
     Q8) — plain YAML, deliberately not `*.auto.tfvars.json`: Terraform never
@@ -361,6 +363,10 @@ def write_resolved_manifest(
     (`build_version_mismatch`, docs/design/helm-chart-deployment.md). With a version, `pinned_by` says where the
     documents came from (`spec.version` or `--pin`), and `pin_sources` names the document each pin in
     `version.yaml` (`write_effective_version()`) came from.
+
+    `provenance` adds `solution` and `remotes` (`SourceRecord.provenance()`, docs/design/remote-commit-provenance.md
+    R1): which commit of the solution and of each git remote the build took its files from. `build_run()` writes
+    the file before it copies any source and again, with these keys, once every source is copied.
     """
     names = version_names(graph.version)
     manifest: dict[str, Any] = {
@@ -380,6 +386,8 @@ def write_resolved_manifest(
     promotion = _dump_promotion(graph)
     if promotion is not None:
         manifest["promotion"] = promotion
+    if provenance is not None:
+        manifest.update(provenance)
     build_path.mkdir(parents=True, exist_ok=True)
     path = build_path / "resolved.yaml"
     path.write_text(yaml.safe_dump(manifest, sort_keys=True), encoding="utf-8")
@@ -461,6 +469,7 @@ def materialise_provisioner_sources(
     dry_run: bool = False,
     on_step: Callable[[str], None] | None = None,
     credentials: RemoteCredentialResolver | None = None,
+    record: SourceRecord | None = None,
 ) -> Path | None:
     """Recursively sync `provisioner.depends_on`'s own sources first, then
     `provisioner`'s own (ADR-0029 — docs/design/provisioner-source-dependencies.md).
@@ -513,6 +522,7 @@ def materialise_provisioner_sources(
             dry_run=dry_run,
             on_step=on_step,
             credentials=credentials,
+            record=record,
         )
     source_path: Path | None = None
     if provisioner.source is not None:
@@ -523,7 +533,9 @@ def materialise_provisioner_sources(
                     f"(dependency, {describe_source(provisioner.source)})"
                 )
         else:
-            source_path = sync_source(context.root, build_path, provisioner.source, remotes, credentials=credentials)
+            source_path = sync_source(
+                context.root, build_path, provisioner.source, remotes, credentials=credentials, record=record
+            )
             if on_step:
                 on_step(f"materialised provisioner '{provisioner.name}' source at {source_path} (dependency)")
     materialised[provisioner.name] = source_path
@@ -709,7 +721,7 @@ def build_run(
     version = resolve_version(context, deployment)
 
     diagnostics = Diagnostics()
-    # docs/work/integration-readiness.md D21: a required integration that is not ready stops the build first.
+    # docs/design/integration-readiness.md, "Where it runs": a required integration that is not ready stops the build first.
     preflight = integration_preflight(index)
     diagnostics.extend(preflight)
     if not preflight.ok:
@@ -770,6 +782,13 @@ def build_run(
     # One per build: lazy, so a build that clones nothing resolves no credential; `--resolve` also
     # lets a credential come from an integration-backed store.
     credentials = RemoteCredentialResolver(context, deployment_name, allow_stores=resolve, pin=pin)
+    # What each copy below takes from which git remote, for `resolved.yaml` (docs/design/remote-commit-provenance.md).
+    record = SourceRecord()
+    # Documents read from `spec.discovery.remotes` configured this build too (Part C, C1 rule 6): the whole checkout
+    # counts as taken, so any uncommitted change there makes the record dirty.
+    for name, checkout in context.controller.document_remotes.items():
+        record.resolved(name, remotes[name], checkout)
+        record.took(checkout, ".")
 
     # Assets (docs/design/asset-management.md Phases 3-4) — every asset slot
     # actually selected by this build's execution steps, statically
@@ -797,7 +816,14 @@ def build_run(
         else:
             try:
                 asset_path = sync_asset(
-                    context.root, build_path, asset, graph.properties, remotes, slot=slot, credentials=credentials
+                    context.root,
+                    build_path,
+                    asset,
+                    graph.properties,
+                    remotes,
+                    slot=slot,
+                    credentials=credentials,
+                    record=record,
                 )
             except SourceSyncError as exc:
                 if slot == asset_name:
@@ -852,6 +878,7 @@ def build_run(
                 dry_run=dry_run,
                 on_step=on_step,
                 credentials=credentials,
+                record=record,
             )
         integration = resolve_integration(index, provisioner)
         if Capability.CONTAINER in integration.CAPABILITIES:
@@ -897,7 +924,9 @@ def build_run(
             # Nothing is copied here, but prepare() writes into this directory (the GitOps sidecar).
             source_path.mkdir(parents=True, exist_ok=True)
         else:
-            source_path = sync_source(context.root, build_path, provisioner.source, remotes, credentials=credentials)
+            source_path = sync_source(
+                context.root, build_path, provisioner.source, remotes, credentials=credentials, record=record
+            )
             _step(f"materialised provisioner '{step.name}' source at {source_path}")
 
         # Extends `materialised` (ADR-0029, seeded above) to also cover
@@ -976,6 +1005,7 @@ def build_run(
             on_step=on_step,
             credentials=credentials,
             offline=offline,
+            record=record,
         )
         diagnostics.extend(workload_diagnostics)
 
@@ -1001,12 +1031,13 @@ def build_run(
     # rendered, matching v1's own unconditional "sbom runs last" ordering.
     # Skipped in a dry run: nothing has actually been rendered to scan yet.
     if not dry_run:
+        commit = built_commit_sha(context.root)
         sbom_diagnostics = write_sbom(
             build_path,
             graph,
             index,
             remotes,
-            commit=built_commit_sha(context.root),
+            commit=commit,
             helm_cache=helm_cache_dir(context.root),
         )
         diagnostics.extend(sbom_diagnostics)
@@ -1031,8 +1062,8 @@ def build_run(
         # accumulator) so `policy_results.cve_policy_result()` can build a
         # ManifestPolicyResultModel from exactly this policy's own
         # findings, not build_run()'s full, mixed accumulation
-        # (docs/work/audit-trail.md's "DeploymentManifestModel.
-        # policy_results population" design).
+        # (docs/design/audit-trail.md's "Policy
+        # results").
         cve_diagnostics = evaluate_cve_policy(build_path, graph.workspace, index)
         diagnostics.extend(cve_diagnostics)
         cve_policy_result = build_cve_policy_result(graph.workspace, cve_diagnostics)
@@ -1054,6 +1085,7 @@ def build_run(
             namespaces=graph.namespaces,
             index=index,
             credentials=credentials,
+            record=record,
         )
         checkov_diagnostics = evaluate_checkov_policy(
             build_path, graph.workspace, materialised, namespaces=graph.namespaces, index=index
@@ -1076,6 +1108,17 @@ def build_run(
         ]
         if policy_results:
             write_policy_results(build_path, policy_results)
+
+        # After the Checkov snapshot, the last copy: `resolved.yaml` again, now with the commit of the solution and
+        # of every git remote the build took files from (docs/design/remote-commit-provenance.md, "The record in
+        # `resolved.yaml`").
+        write_resolved_manifest(
+            build_path,
+            graph,
+            pinned_by="--pin" if pin is not None else "spec.version",
+            targets=pin_targets,
+            provenance=record.provenance(context.root, build_path, commit, diagnostics),
+        )
     else:
         _step(f"would write {build_path / SBOM_FILENAME}")
         # Offline, so a dry run still judges the declared images; nothing is rendered, so there are no others.

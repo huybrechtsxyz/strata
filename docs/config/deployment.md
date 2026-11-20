@@ -27,9 +27,9 @@ with what runtime behavior*. `strata build run`/`strata deploy run` both take a 
 - `spec.docker_context` — the Docker context that this deployment's Compose steps deploy to — see "Choosing the
   target" below
 - `spec.extends` — another deployment document (typically `partial: true`) whose spec is merged
-  in before this one's (child wins; nested blocks deep-merge; stages merge by step name and
-  `providers` and `assets` by slot; `environments` and `version` lists append base-first, each entry once; other
-  lists are replaced)
+  in before this one's (child wins; nested blocks deep-merge; stages merge by step name, and a merged stage's
+  `health_checks` by name; `providers` and `assets` merge by slot; `environments`, `configurations` and `version`
+  lists append base-first, each entry once; other lists are replaced)
 - `spec.partial` — `true` marks a base deployment as not independently deployable (a leaf picks it
   up via `extends`)
 - `spec.providers[]` — rebind [`workspace`](workspace.md) provider slots for this deployment, each

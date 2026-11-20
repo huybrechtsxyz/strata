@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render the audit CloudEvents+ECS envelope on demand — never written to disk
-(docs/work/audit-trail.md's "The audit files — ... the Event is rendered,
-not written").
+(docs/design/audit-trail.md's "The audit
+files").
 
-Phase 2 of that doc's Layer 2 Implementation Plan. Lives in `controllers/`
+Lives in `controllers/`
 (not `utils/`) because it depends on concrete model types
 (`DeploymentManifestModel`/`DeploymentMetricsModel`), and `utils/` must
 never depend on `models/` (ADR-0003) — same placement reasoning as
@@ -89,7 +89,9 @@ def _render_event(
                 "kind": "event",
                 "category": ["configuration"],
                 "action": ecs_action,
-                "outcome": outcome,
+                # ECS allows `success`, `failure` and `unknown`; a failed or partial run is a `failure`. The
+                # manifest it points to says which (docs/design/audit-trail.md, "Stages").
+                "outcome": "success" if outcome == "success" else "failure",
                 "duration": duration_nanos,
             },
             "user": {"name": actor},

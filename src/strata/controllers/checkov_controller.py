@@ -44,6 +44,7 @@ from strata.controllers.integration_resolution import bind_integration_config
 from strata.controllers.remote_credentials import RemoteCredentialResolver
 from strata.controllers.remote_resolution import RemoteResolutionError
 from strata.controllers.solution_controller import DocumentIndex
+from strata.controllers.source_record import SourceRecord
 from strata.controllers.source_sync import SourceSyncError, source_repo_root
 from strata.controllers.workload_controller import resolve_module
 from strata.integrations.checkov import CheckovIntegration
@@ -75,7 +76,7 @@ _FRAMEWORK_TOOLS: dict[str, frozenset[str]] = {
 
 
 def declared_checkov(index: DocumentIndex | None) -> CheckovIntegration | None:
-    """The enabled `checkov` document's scanner, else `None` (docs/work/integration-readiness.md D26)."""
+    """The enabled `checkov` document's scanner, else `None` (docs/design/integration-readiness.md, "Local tools as declarable integrations")."""
     config = bind_integration_config(index, "checkov", requester="checkov_policy") if index is not None else None
     return CheckovIntegration(config) if config is not None else None
 
@@ -277,6 +278,7 @@ def snapshot_checkov_configs(
     namespaces: dict[str, NamespaceModel] | None = None,
     index: DocumentIndex | None = None,
     credentials: RemoteCredentialResolver | None = None,
+    record: SourceRecord | None = None,
 ) -> None:
     """Copy `checkov_policy.config_file` from each scanned target's source repository into the build output.
 
@@ -284,6 +286,7 @@ def snapshot_checkov_configs(
     check`/`findings` read the same file from the build output and never resolve a remote
     themselves. A repository without the file gets no snapshot; the gate then reports that
     target through `on_missing_data`. Stale snapshots from an earlier build are removed first.
+    `record` records each copied file for `resolved.yaml` (docs/design/remote-commit-provenance.md).
     """
     shutil.rmtree(build_path / CHECKOV_CONFIG_DIR, ignore_errors=True)
     policy = workspace.spec.checkov_policy
@@ -295,7 +298,7 @@ def snapshot_checkov_configs(
             continue
         try:
             repo_root = (
-                source_repo_root(root, target.source, remotes, credentials=credentials)
+                source_repo_root(root, target.source, remotes, credentials=credentials, record=record)
                 if target.source is not None
                 else root
             )
@@ -305,6 +308,8 @@ def snapshot_checkov_configs(
         if origin.is_file():
             target.config.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(origin, target.config)
+            if record is not None:
+                record.took(repo_root, policy.config_file)
 
 
 def _with_config(policy: CheckovPolicyModel, targets: list[_Target]) -> list[_Target]:
@@ -444,6 +449,16 @@ def _report_missing_data(
     scope_label = scope if scope is not None else "policy"
     message = f"checkov_policy: cannot evaluate {scope_label} — {reason}."
     if on_missing_data == "block":
-        diagnostics.error(message, code="checkov_policy_missing_data")
+        diagnostics.error(
+            message,
+            code="checkov_policy_missing_data",
+            hint="Make the scan possible (install checkov, and let the build materialise what it scans); to let the "
+            "run continue without it, set the policy's on_missing_data to 'warn'.",
+        )
     elif on_missing_data == "warn":
-        diagnostics.warning(message, code="checkov_policy_missing_data")
+        diagnostics.warning(
+            message,
+            code="checkov_policy_missing_data",
+            hint="Make the scan possible (install checkov, and let the build materialise what it scans); keep "
+            "on_missing_data at 'block' where a run must never pass unscanned.",
+        )

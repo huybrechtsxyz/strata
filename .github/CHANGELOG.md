@@ -8,6 +8,134 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-20
+
+The audit record names the commits that were built, not the checkouts as they are at deploy time. An audit sink can
+commit to the repository a pipeline checked out, and a solution can read documents from other repositories. The
+audit manifest records each step's outcome, the CI run and why a run failed, and a run that failed after changing
+something is `partial`.
+
+Check before upgrading:
+
+- An integration audit sink now sends `event.outcome: failure` (was `failed`), as ECS requires. Update a SIEM rule
+  that matches `failed`.
+- Strata pushes only its own commits from a pipeline's checkout. A pipeline that checks out a feature branch or a pull
+  request's merge and writes audit files or a GitOps file to another branch now fails that push; check out the target
+  branch instead.
+- A GitOps step finds its checkout under the deploying solution's folder, not the build's. A pipeline that builds and
+  deploys in different folders now works.
+
+### Added
+
+- **`build run` records which commits it took its files from** in `resolved.yaml`.
+  - `solution: {commit, dirty}` is the solution repository.
+  - `remotes: {name: {url, ref, commit, dirty}}` covers every git remote the build copied files from: `path`
+    remotes, `fetch: external` checkouts and strata's own clones. An asset's `spec.location` is listed as
+    `asset:<name>`.
+  - `dirty` is `true` when the files taken had uncommitted changes. Only the copied paths are checked, and
+    files git ignores do not count.
+- New warning `remote_checkout_dirty` at build time, with a hint. `audit_remote_commit_unavailable` (a remote's
+  commit could not be read) is now reported by the build too.
+- **`spec.audit.require_remote_commits`** (Configuration, default `false`). With it on, `deploy run`, `plan` and
+  `apply` stop before anything changes when the build's record has a gap:
+  - `audit_remote_commit_unavailable`: no commit, for example a plain copy or a solution outside git;
+  - `remote_checkout_dirty`: uncommitted changes, or changes that could not be checked;
+  - `build_remote_provenance_missing`: a build made by an older strata.
+
+  A build still only warns, so building an uncommitted edit keeps working. See
+  [Which commits were deployed](../docs/config/configuration.md#which-commits-were-deployed).
+- The audit manifest has `commit_dirty`, and each `artifacts.repositories` entry has `dirty`. Both are optional,
+  so older manifests still load.
+- **A git audit sink can write to a `path` remote**, the checkout a pipeline already made. Strata:
+  - writes there and never clones, resets or switches branch;
+  - commits only the files it wrote, so other changes in the checkout stay as they were;
+  - pushes with the checkout's own credentials (`HEAD:<branch>`, so a detached checkout works);
+  - when the branch moved, rebases and retries.
+
+  The new `git.action` stops earlier: `commit`, or `none` (write only), for a pipeline that pushes itself. Both
+  need a `path` remote (`audit_sink_action_needs_path_remote`). See
+  [Audit files in a repository your pipeline checked out](../docs/config/configuration.md#audit-files-in-a-repository-your-pipeline-checked-out).
+- `strata validate` warns when an audit sink writes inside a `source_path` the build takes from the same remote
+  (`audit_sink_overlaps_source`).
+- **A GitOps step (`argocd`, `flux`) can write to a `path` remote** the same way, with the new `gitops.branch` (the
+  branch pushed to) and `gitops.action` (`push`, `commit` or `none`). Deploy, plan and destroy all work in the
+  pipeline's checkout. `deploy run` reports `gitops_not_pushed` (information) after `commit` or `none`. New
+  `validate` findings: `gitops_branch_required`, `gitops_branch_needs_path_remote`,
+  `gitops_action_needs_path_remote`, and the warning `gitops_output_overlaps_source`. See
+  [A repository your pipeline checked out](../docs/config/solution.md#a-repository-your-pipeline-checked-out).
+- **Documents in other repositories: `spec.discovery.remotes`.** It lists `path` remotes whose checkouts are
+  scanned for documents beside the solution root, for example one repository per hub zone.
+  - Their documents join the solution's one namespace, so `validate` and the cross-zone views see every zone.
+  - Paths inside documents stay relative to the solution root, and `exclude` applies inside each root.
+  - `build run` records each checkout's commit.
+  - Every listed remote must be checked out. New errors: `document_remote_missing`,
+    `document_remote_has_manifest` and `document_remote_overlaps`.
+
+  See [Documents in other repositories](../docs/config/solution.md#documents-in-other-repositories).
+- The audit manifest now records:
+  - `pipeline`: the Azure Pipelines or GitHub Actions run that deployed, with a link to it. Left out outside CI.
+  - `file`: the deployment document's path.
+  - `warnings` and `messages`: the run's warnings and info findings. Until now only `errors` were kept.
+  - `stages`: one per provisioning step, with its status (`success`, `failed`, or `skipped` and why), its timing,
+    each phase it ran (`setup`, `check`, `plan`, `apply`, `destroy`) and the findings that name it. See
+    [Stages](../docs/design/audit-trail.md#stages).
+- **A deploy that fails after a step succeeded is recorded as `partial`**, not `failed`: something changed before it
+  stopped. The metrics' `stages_total` and `stages_failed` now count real steps; `outcome` there, and in the sent
+  event, stays `success` or `failed`.
+- The audit metrics (`_metrics.json`) now fill `tenant` and `commit_sha`, and count the policy checks the manifest
+  records in `policy_checks_total` and `policy_checks_failed` (left out when no policy was judged).
+- The audit metrics say why a failed run failed in `error_category`: `policy` (a denying policy), `auth`, `timeout`
+  or `state_lock`, recognised from strata's own error codes and markers, and `unknown` otherwise. See [Why a run failed](../docs/design/audit-trail.md#why-a-run-failed).
+- `strata audit status` and `audit changes` name the step a failed or partial run stopped at, for example
+  `partial (apply_apps)`, and as `failed_step` in JSON output.
+
+### Changed
+
+- **The audit manifest copies the build's record.**
+  - `commit_sha` and `artifacts.repositories` describe what was built, even when the deploy runs in a later job or
+    the checkout moved.
+  - The deploy no longer reads a checkout, and no longer repeats the build's warning.
+  - A remote the workspace names but the build copied nothing from, such as a chart-based module's remote, is
+    listed without a commit.
+  - A build made before this release is read at deploy time, as before.
+- `artifacts.repositories` in the audit manifest is sorted by name.
+- Pushing from a pipeline's checkout (an audit sink or a GitOps step on a `path` remote):
+  - pushes only commits strata made. A checkout of a feature branch or a pull request's merge is refused instead of
+    pushed to the target branch;
+  - pushes a commit an earlier run left unpushed, also when there is nothing new to commit;
+  - retries only when the branch moved, not when a protected branch or a hook refuses the push;
+  - a GitOps destroy fails when `git ls-files` fails, instead of deleting the file without committing.
+- A GitOps step (`argocd`, `flux`) finds its checkout or clone under the deploying solution's folder, not the
+  folder the build ran in. A build output carried to a deploy in another folder, such as a separate stage on a
+  self-hosted agent, no longer looks for a `path` remote's checkout in the build's folder.
+- An audit git sink's `branch` may not start with `-`, the same rule as `gitops.branch`.
+- `extends` merges a stage's `health_checks` by `name` when both deployments set the stage, instead of the child's
+  list replacing the base's, and appends `configurations` base-first like `environments`. Both fields are accepted
+  but not used yet, so no deploy changes.
+- The exported workspace schema accepts one name for a resource's `depends_on`, as strata already did, so an editor
+  no longer flags `depends_on: other`.
+- The `checkov_policy`, `release_gate_policy` and `image_gate_policy` "cannot evaluate" findings carry a hint, as
+  `cve_policy`'s already did: fix the cause, or what changing `on_missing_data` trades off.
+- `strata integration check NAME` says when an undeclared NAME is a v1 integration type not ported yet (such as
+  `ansible`), as a declared document of that type already did, instead of only "not a known integration type".
+- **The audit event's `event.outcome` is `failure`, not `failed`**, for a failed or partial run, as ECS requires. A
+  SIEM rule that matches `failed` must match `failure` instead.
+- `strata validate` no longer reports `path_remote_not_pushable`: an audit sink or a GitOps step may now push to a
+  `path` remote.
+
+### Removed
+
+- Seven audit manifest fields nothing ever filled. Older manifests still load: `force` was written as `false`, and is
+  dropped when a manifest is read.
+  - `commit_author` and `commit_message`: the deployed commit is often not the one that made the change, so they
+    would have named the wrong author; `git show <commit_sha>` gives both for the commit that was built;
+  - `force` (`deploy run --force` has no effect), `pull_request`, `outputs`, `signatures`, and `metadata`, replaced
+    by `pipeline`.
+- The audit metrics' `resource_changes` and `sections` (cost, CVE, drift), never filled: only Terraform could count
+  resource changes, and nothing measured the sections.
+- A stage's `outputs`, `outputs_artifact` and `topology`, also never filled. Output values stay in the workspace's
+  `output_store`; a step can target several topologies.
+
 ## [2.7.0] - 2026-11-14
 
 Several products in one ring can share pins without copying them: a deployment lists several version documents.
@@ -757,7 +885,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/huybrechtsxyz/strata/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/huybrechtsxyz/strata/compare/v2.6.3...v2.7.0
 [2.6.3]: https://github.com/huybrechtsxyz/strata/compare/v2.6.2...v2.6.3
 [2.6.2]: https://github.com/huybrechtsxyz/strata/compare/v2.6.1...v2.6.2

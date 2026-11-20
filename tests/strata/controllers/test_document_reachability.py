@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for `document_unreferenced` (docs/work/unreferenced-documents.md)."""
+"""Tests for `document_unreferenced` (docs/design/unreferenced-documents.md)."""
 
 import json
 from pathlib import Path

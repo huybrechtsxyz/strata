@@ -3,15 +3,18 @@
 phase 3; the images rendered charts run: docs/design/helm-image-delivery.md, "Where the policy is judged")."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
+from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
 from strata.controllers.build_controller import build_run
 from strata.controllers.deploy_controller import deploy_run
 from strata.controllers.policy_controller import check_policies
 from strata.controllers.policy_results import read_policy_results
 from strata.controllers.solution_context import open_solution
+from strata.utils import layout
 from strata.utils.sbom_utils import image_to_purl
 from strata.utils.transport import CommandResult
 
@@ -254,6 +257,33 @@ def test_deploy_run_denies_an_image_whose_tag_was_removed_after_the_build_and_ru
     assert terraform == []
     results = {r.policy_name: r for r in read_policy_results(build_path)}
     assert (results["image_tag_policy"].phase, results["image_tag_policy"].passed) == ("deploy", False)
+
+
+def test_a_deploy_run_the_policy_denies_writes_a_failed_manifest_with_the_policy_result(tmp_path, terraform):
+    # The deploy is denied before any step runs, but the audit still records the attempt (a denied `build run`
+    # writes no manifest: docs/design/security-gates.md, "6.5 Policy results").
+    root, build_path = _built(tmp_path, artifact_tag="  image_tag: '1.0.0'\n")
+    (root / "artifact.yaml").write_text(
+        _HEADER.format(kind="artifact", name="catalog") + "  image_name: registry/catalog\n", encoding="utf-8"
+    )
+    context = _context(root)
+    diagnostics = deploy_run(context, "app", build_path, force=True)
+    assert not diagnostics.ok
+
+    audit = finalize_and_distribute_deploy_audit(
+        context,
+        "app",
+        build_path,
+        execution_id="11111111-1111-1111-1111-111111111111",
+        started_at=datetime.now(timezone.utc),
+        run_diagnostics=diagnostics,
+    )
+
+    assert audit.ok, audit.messages()
+    manifest = json.loads(next(layout.audit_dir(root).rglob("_manifest.json")).read_text(encoding="utf-8"))
+    assert (manifest["action"], manifest["status"]) == ("deploy", "failed")
+    [result] = [r for r in manifest["policy_results"] if r["policy_name"] == "image_tag_policy"]
+    assert (result["phase"], result["passed"]) == ("deploy", False)
 
 
 def test_deploy_run_denies_an_image_the_builds_rendered_chart_runs_and_runs_no_step(tmp_path, terraform):
