@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deployment (kind: deployment) &mdash; strata 2.8.0 documentation</title>
+  <title>Deployment (kind: deployment) &mdash; strata 2.9.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=69ff2ef9"></script>
+      <script src="../_static/documentation_options.js?v=182a64a0"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -69,6 +69,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/security-gates.html">How To: Gate deploys on security findings</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/share-version-pins-across-workspaces.html">How To: Share version pins between products in one ring</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/verify-a-deploy.html">How To: Check That a Deployed App Actually Works</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
 <ul class="current">
@@ -98,6 +99,10 @@
 <li class="toctree-l2"><a class="reference internal" href="#choosing-the-target">Choosing the target</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#kubernetes-kube-context">Kubernetes (<code class="docutils literal notranslate"><span class="pre">kube_context</span></code>)</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#docker-docker-context">Docker (<code class="docutils literal notranslate"><span class="pre">docker_context</span></code>)</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#verifying-a-deploy">Verifying a deploy</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#strata-deploy-verify"><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">verify</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#handover-document">Handover document</a></li>
@@ -173,8 +178,7 @@ replaces the list for one run</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.docker_context</span></code> — the Docker context that this deployment’s Compose steps deploy to — see “Choosing the
 target” below</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.extends</span></code> — another deployment document (typically <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code>) whose spec is merged
-in before this one’s (child wins; nested blocks deep-merge; stages merge by step name, and a merged stage’s
-<code class="docutils literal notranslate"><span class="pre">health_checks</span></code> by name; <code class="docutils literal notranslate"><span class="pre">providers</span></code> and <code class="docutils literal notranslate"><span class="pre">assets</span></code> merge by slot; <code class="docutils literal notranslate"><span class="pre">environments</span></code>, <code class="docutils literal notranslate"><span class="pre">configurations</span></code> and <code class="docutils literal notranslate"><span class="pre">version</span></code>
+in before this one’s (child wins; nested blocks deep-merge; stages merge by step name; <code class="docutils literal notranslate"><span class="pre">verify.checks</span></code> merge by name, on the spec and in a stage; <code class="docutils literal notranslate"><span class="pre">providers</span></code> and <code class="docutils literal notranslate"><span class="pre">assets</span></code> merge by slot; <code class="docutils literal notranslate"><span class="pre">environments</span></code>, <code class="docutils literal notranslate"><span class="pre">configurations</span></code> and <code class="docutils literal notranslate"><span class="pre">version</span></code>
 lists append base-first, each entry once; other lists are replaced)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.partial</span></code> — <code class="docutils literal notranslate"><span class="pre">true</span></code> marks a base deployment as not independently deployable (a leaf picks it
 up via <code class="docutils literal notranslate"><span class="pre">extends</span></code>)</p></li>
@@ -186,6 +190,8 @@ document to use instead of the slot’s default — see “Rebinding a provider�
 instead of the slot’s default — see “Rebinding an asset” below</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.documentation</span></code> — render the handover document after each successful <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> and store it with the
 audit record — see “Handover document” below</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.verify</span></code> — checks for the whole deployment, run once after every step was applied — see “Verifying a
+deploy” below</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.locking</span></code> — deployment lock configuration</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.layers</span></code> — deployment layer/scope segments</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.stages[]</span></code> — runtime parameters per provisioning step, each:</p>
@@ -194,8 +200,12 @@ audit record — see “Handover document” below</p></li>
 (never redefines what runs — only how)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">enabled</span></code> — bool, or a string expression (accepted but not yet evaluated)</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">on_failure</span></code> — <code class="docutils literal notranslate"><span class="pre">stop</span></code>, <code class="docutils literal notranslate"><span class="pre">rollback</span></code>, or <code class="docutils literal notranslate"><span class="pre">continue</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">timeouts</span></code> — per-phase (<code class="docutils literal notranslate"><span class="pre">setup</span></code>/<code class="docutils literal notranslate"><span class="pre">check</span></code>/<code class="docutils literal notranslate"><span class="pre">plan</span></code>/<code class="docutils literal notranslate"><span class="pre">apply</span></code>/<code class="docutils literal notranslate"><span class="pre">destroy</span></code>) overrides</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">health_checks[]</span></code> — post-stage <code class="docutils literal notranslate"><span class="pre">http</span></code>/<code class="docutils literal notranslate"><span class="pre">tcp</span></code> reachability probes</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">timeouts</span></code> — per-phase (<code class="docutils literal notranslate"><span class="pre">setup</span></code>/<code class="docutils literal notranslate"><span class="pre">check</span></code>/<code class="docutils literal notranslate"><span class="pre">plan</span></code>/<code class="docutils literal notranslate"><span class="pre">apply</span></code>/<code class="docutils literal notranslate"><span class="pre">destroy</span></code>/<code class="docutils literal notranslate"><span class="pre">verify</span></code>) overrides</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">verify</span></code> — checks run after the step is applied (or destroyed), which decide whether the deploy worked — see
+“Verifying a deploy” below</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">health_checks[]</span></code> — removed in 2.9 (<span class="xref myst">ADR-0068</span>): it never
+ran. A stage that declares it fails to load, and the message writes the <code class="docutils literal notranslate"><span class="pre">verify.checks</span></code> entries (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">http</span></code>
+or <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">tcp</span></code>) to use instead</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">secrets[]</span></code> — secret keys this stage needs injected</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">namespace</span></code> / <code class="docutils literal notranslate"><span class="pre">helm_namespaces[]</span></code> — restrict a stage to specific namespaces</p></li>
 </ul>
@@ -305,15 +315,18 @@ directories <code class="docutils literal notranslate"><span class="pre">strata<
 </section>
 <section id="tokens-from-the-deployment">
 <h2>Tokens from the deployment<a class="headerlink" href="#tokens-from-the-deployment" title="Link to this heading"></a></h2>
-<p>A workspace is shared by every deployment, so nothing written in it can say which one is running. Two tokens read
+<p>A workspace is shared by every deployment, so nothing written in it can say which one is running. These tokens read
 it from the deployment that is:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">${deployment:name}</span></code>: this document’s <code class="docutils literal notranslate"><span class="pre">meta.name</span></code></p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code>: its <code class="docutils literal notranslate"><span class="pre">spec.tenant</span></code>, including one inherited through <code class="docutils literal notranslate"><span class="pre">extends</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${deployment:kube_context}</span></code>, <code class="docutils literal notranslate"><span class="pre">${deployment:docker_context}</span></code>: its <code class="docutils literal notranslate"><span class="pre">spec.kube_context</span></code> and <code class="docutils literal notranslate"><span class="pre">spec.docker_context</span></code>,
+for a verify check that must reach the same cluster or engine (<code class="docutils literal notranslate"><span class="pre">[kubectl,</span> <span class="pre">--context,</span> <span class="pre">&quot;${deployment:kube_context}&quot;,</span> <span class="pre">...]</span></code>)</p></li>
 </ul>
 <p>The usual use is a Terraform state key, <code class="docutils literal notranslate"><span class="pre">key:</span> <span class="pre">${deployment:name}.tfstate</span></code>, in the workspace’s backend (see
 “Terraform backend” in <a class="reference internal" href="workspace.html"><span class="std std-doc">workspace</span></a>). <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks them for every deployment that
-reaches the document: <code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code> on a deployment without a tenant is an error, as is any other key. A
+reaches the document: <code class="docutils literal notranslate"><span class="pre">${deployment:tenant}</span></code> on a deployment without a tenant is an error (likewise a context it
+does not set), as is any other key. A
 <code class="docutils literal notranslate"><span class="pre">partial:</span> <span class="pre">true</span></code> base is judged only once a deployment extends it.</p>
 </section>
 <section id="parameter-sets">
@@ -389,6 +402,9 @@ context chosen with <code class="docutils literal notranslate"><span class="pre"
 <ul class="simple">
 <li><p>Every <code class="docutils literal notranslate"><span class="pre">docker</span></code> call of the deployment’s Compose steps runs with <code class="docutils literal notranslate"><span class="pre">DOCKER_CONTEXT</span></code> set to it: <code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">deploy</span></code>, the
 <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> preview (<code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">config</span></code>), <code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">rm</span></code> and the destroy preview (<code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">services</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stack</span> <span class="pre">deploy</span></code> runs with <code class="docutils literal notranslate"><span class="pre">--detach=false</span></code>: a step succeeds once its services have converged (their tasks
+run, and are healthy where the service has a <code class="docutils literal notranslate"><span class="pre">healthcheck</span></code>), as <code class="docutils literal notranslate"><span class="pre">stack</span> <span class="pre">rm</span> <span class="pre">--detach=false</span></code> waits for removal. A
+service that never converges keeps it waiting until <code class="docutils literal notranslate"><span class="pre">timeouts.apply</span></code> stops it, which fails the step.</p></li>
 <li><p>Before the first step runs, strata asks Docker (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">context</span> <span class="pre">inspect</span></code>, which contacts no engine) whether the
 context exists. If not, the deploy stops with <code class="docutils literal notranslate"><span class="pre">compose_docker_context_missing</span></code>, listing the contexts Docker has. This
 also covers <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>, whose <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">stack</span> <span class="pre">config</span></code> never looks at the context.</p></li>
@@ -397,6 +413,194 @@ also covers <code class="docutils literal notranslate"><span class="pre">--dry-r
 workflow with a context created from the same host.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">docker_context:</span> <span class="pre">default</span></code> is the local engine.</p></li>
 </ul>
+</section>
+</section>
+<section id="verifying-a-deploy">
+<h2>Verifying a deploy<a class="headerlink" href="#verifying-a-deploy" title="Link to this heading"></a></h2>
+<p>A deploy succeeds when its tool does: Terraform’s <code class="docutils literal notranslate"><span class="pre">apply</span></code> succeeds once the cloud accepted the change, even if the
+web app it created never starts. <code class="docutils literal notranslate"><span class="pre">verify</span></code> checks run after the change, wait for the workload to come up, and fail
+the run when it does not (<span class="xref myst">ADR-0066</span>). They are
+declared in two places:</p>
+<ul class="simple">
+<li><p><strong>A stage’s <code class="docutils literal notranslate"><span class="pre">verify</span></code></strong>: checks for that step, run right after it is applied (or destroyed) and before the next
+step starts.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">spec.verify</span></code></strong>: checks for the deployment as a whole (an end-to-end request, a smoke transaction), run once
+after every step was applied (or destroyed).</p></li>
+</ul>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">step</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apply_web</span>
+<span class="w">      </span><span class="nt">verify</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">initial_delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">                 </span><span class="c1"># the app needs time to start</span>
+<span class="w">        </span><span class="nt">checks</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-answers</span>
+<span class="w">            </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">pwsh</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-File</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">checks/http-ok.ps1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"${output:apply_web.default_hostname}"</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">              </span><span class="nt">TOKEN</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${secret:HEALTH_TOKEN}</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-health</span><span class="w">              </span><span class="c1"># the same, built in</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http</span>
+<span class="w">            </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://${output:apply_web.default_hostname}/health</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-gone</span><span class="w">                </span><span class="c1"># after a destroy: the site no longer answers</span>
+<span class="w">            </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">destroy</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http</span>
+<span class="w">            </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://${output:apply_web.default_hostname}/</span>
+<span class="w">            </span><span class="nt">expect</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">down</span>
+<span class="w">  </span><span class="nt">verify</span><span class="p">:</span><span class="w">                                 </span><span class="c1"># after every step</span>
+<span class="w">    </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span><span class="w">                     </span><span class="c1"># report only, while the check is new</span>
+<span class="w">    </span><span class="nt">checks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">checkout-flow</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">checks/checkout_flow.py</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"${output:apply_web.default_hostname}"</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<ul>
+<li><p><strong>A check</strong> has a <code class="docutils literal notranslate"><span class="pre">type</span></code>, and the first line of what it reports is its message, secrets masked:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">type</span></code></p></th>
+<th class="head"><p>Fields</p></th>
+<th class="head"><p>Answer</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">script</span></code> (default)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run</span></code>, <code class="docutils literal notranslate"><span class="pre">env</span></code>, <code class="docutils literal notranslate"><span class="pre">exit_codes</span></code></p></td>
+<td><p>the exit code: <code class="docutils literal notranslate"><span class="pre">binary</span></code> (default) 0 passes, anything else fails; <code class="docutils literal notranslate"><span class="pre">monitoring</span></code> (the Nagios/Icinga plugin convention) 0 passes, 1 warns, 2 fails, 3 is unknown. Out of <code class="docutils literal notranslate"><span class="pre">timeout</span></code>, unknown</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">http</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">url</span></code>, <code class="docutils literal notranslate"><span class="pre">method</span></code> (<code class="docutils literal notranslate"><span class="pre">GET</span></code>, <code class="docutils literal notranslate"><span class="pre">HEAD</span></code>, <code class="docutils literal notranslate"><span class="pre">OPTIONS</span></code>, <code class="docutils literal notranslate"><span class="pre">POST</span></code>), <code class="docutils literal notranslate"><span class="pre">headers</span></code>, <code class="docutils literal notranslate"><span class="pre">body</span></code> (with <code class="docutils literal notranslate"><span class="pre">POST</span></code>), <code class="docutils literal notranslate"><span class="pre">expect_status</span></code> (default <code class="docutils literal notranslate"><span class="pre">200</span></code>, or a non-empty list), <code class="docutils literal notranslate"><span class="pre">ca_file</span></code> or <code class="docutils literal notranslate"><span class="pre">insecure</span></code>, <code class="docutils literal notranslate"><span class="pre">expect</span></code></p></td>
+<td><p>passes when the status (after redirects) is in <code class="docutils literal notranslate"><span class="pre">expect_status</span></code>. An <code class="docutils literal notranslate"><span class="pre">application/health+json</span></code> answer’s <code class="docutils literal notranslate"><span class="pre">status</span></code> decides instead: <code class="docutils literal notranslate"><span class="pre">pass</span></code>, <code class="docutils literal notranslate"><span class="pre">warn</span></code> or <code class="docutils literal notranslate"><span class="pre">fail</span></code>. No answer at all (refused, timed out) fails</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">tcp</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">host</span></code>, <code class="docutils literal notranslate"><span class="pre">port</span></code>, <code class="docutils literal notranslate"><span class="pre">expect</span></code></p></td>
+<td><p>passes when the connection opens; fails when it does not</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">helm</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">release</span></code>, <code class="docutils literal notranslate"><span class="pre">namespace</span></code>, <code class="docutils literal notranslate"><span class="pre">tests</span></code> (only these, by pod name), <code class="docutils literal notranslate"><span class="pre">env</span></code></p></td>
+<td><p>runs the chart’s own tests, <code class="docutils literal notranslate"><span class="pre">helm</span> <span class="pre">test</span></code>, once, against the deployment’s <code class="docutils literal notranslate"><span class="pre">kube_context</span></code>, with <code class="docutils literal notranslate"><span class="pre">--timeout</span></code> set to the check’s <code class="docutils literal notranslate"><span class="pre">timeout</span></code>: 0 passes, anything else fails. Not retried: Helm already waited for the release to be ready. Not after a destroy</p></td>
+</tr>
+</tbody>
+</table>
+<p><code class="docutils literal notranslate"><span class="pre">expect:</span> <span class="pre">down</span></code> turns <code class="docutils literal notranslate"><span class="pre">http</span></code> and <code class="docutils literal notranslate"><span class="pre">tcp</span></code> around, for a check after a destroy: no answer passes, and so does an
+<code class="docutils literal notranslate"><span class="pre">http</span></code> status outside <code class="docutils literal notranslate"><span class="pre">expect_status</span></code>. A field of another type is refused. A check that cannot start (no such
+executable, not an <code class="docutils literal notranslate"><span class="pre">http(s)://</span></code> URL, a token that does not resolve, a <code class="docutils literal notranslate"><span class="pre">ca_file</span></code> that cannot be read) is unknown
+at once, not retried.</p>
+</li>
+<li><p><strong>HTTPS:</strong> the certificate and host name are checked against the system’s certificate authorities. For a private
+CA or a self-signed certificate, set <code class="docutils literal notranslate"><span class="pre">ca_file</span></code>: a PEM file, relative to the solution root, whose authorities are
+trusted instead; the host name is still checked. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> reports a <code class="docutils literal notranslate"><span class="pre">ca_file</span></code> that does not exist or
+holds no certificate (<code class="docutils literal notranslate"><span class="pre">verify_ca_file_unusable</span></code>). <code class="docutils literal notranslate"><span class="pre">insecure:</span> <span class="pre">true</span></code> checks nothing, and the check’s message ends in
+<code class="docutils literal notranslate"><span class="pre">(certificate</span> <span class="pre">not</span> <span class="pre">checked:</span> <span class="pre">insecure)</span></code>. A certificate that is not trusted fails the check, also with
+<code class="docutils literal notranslate"><span class="pre">expect:</span> <span class="pre">down</span></code>, since something still answers.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">POST</span></code></strong> is for a health endpoint that takes a query, such as GraphQL. <code class="docutils literal notranslate"><span class="pre">body</span></code> is sent as written, tokens
+resolved; set its <code class="docutils literal notranslate"><span class="pre">Content-Type</span></code> in <code class="docutils literal notranslate"><span class="pre">headers</span></code>. There is no <code class="docutils literal notranslate"><span class="pre">PUT</span></code>, <code class="docutils literal notranslate"><span class="pre">PATCH</span></code> or <code class="docutils literal notranslate"><span class="pre">DELETE</span></code>: a check must not change
+what it checks.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">run</span></code></strong> is an argument list (the executable on PATH or relative to the solution root, then its arguments),
+run from the solution root, never through a shell. Tokens in <code class="docutils literal notranslate"><span class="pre">run</span></code>, <code class="docutils literal notranslate"><span class="pre">env</span></code>, <code class="docutils literal notranslate"><span class="pre">url</span></code>, <code class="docutils literal notranslate"><span class="pre">headers</span></code>, <code class="docutils literal notranslate"><span class="pre">body</span></code>, <code class="docutils literal notranslate"><span class="pre">host</span></code>,
+<code class="docutils literal notranslate"><span class="pre">release</span></code> and <code class="docutils literal notranslate"><span class="pre">namespace</span></code> resolve
+as in a script provisioner, including <code class="docutils literal notranslate"><span class="pre">${output:STEP.KEY}</span></code>. In a stage’s check, STEP is the stage’s own step or
+one it depends on, directly or through others: those are the outputs the check is sure to have. In
+<code class="docutils literal notranslate"><span class="pre">spec.verify</span></code>, STEP is any step of the workspace. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks them all, and reports any other
+output as <code class="docutils literal notranslate"><span class="pre">verify_output_unavailable</span></code>. Put a secret in <code class="docutils literal notranslate"><span class="pre">env</span></code> or <code class="docutils literal notranslate"><span class="pre">headers</span></code>: an argument shows in the process
+list. A script also gets <code class="docutils literal notranslate"><span class="pre">STRATA_DEPLOYMENT</span></code>, <code class="docutils literal notranslate"><span class="pre">STRATA_STEP</span></code> (empty in <code class="docutils literal notranslate"><span class="pre">spec.verify</span></code>), <code class="docutils literal notranslate"><span class="pre">STRATA_CHECK</span></code>,
+<code class="docutils literal notranslate"><span class="pre">STRATA_ACTION</span></code> (<code class="docutils literal notranslate"><span class="pre">apply</span></code>, <code class="docutils literal notranslate"><span class="pre">destroy</span></code>, or <code class="docutils literal notranslate"><span class="pre">verify</span></code> under <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">verify</span></code>) and <code class="docutils literal notranslate"><span class="pre">STRATA_ATTEMPT</span></code>.</p></li>
+<li><p><strong>The deployment’s contexts:</strong> a <code class="docutils literal notranslate"><span class="pre">script</span></code> or <code class="docutils literal notranslate"><span class="pre">helm</span></code> check reaches the cluster and engine the steps deployed to.
+With <code class="docutils literal notranslate"><span class="pre">kube_context</span></code>, it gets <code class="docutils literal notranslate"><span class="pre">HELM_KUBECONTEXT</span></code> (which <code class="docutils literal notranslate"><span class="pre">helm</span></code> reads) and <code class="docutils literal notranslate"><span class="pre">STRATA_KUBE_CONTEXT</span></code>; with
+<code class="docutils literal notranslate"><span class="pre">docker_context</span></code>, <code class="docutils literal notranslate"><span class="pre">DOCKER_CONTEXT</span></code> and <code class="docutils literal notranslate"><span class="pre">STRATA_DOCKER_CONTEXT</span></code>. A check’s own <code class="docutils literal notranslate"><span class="pre">env</span></code> wins. <code class="docutils literal notranslate"><span class="pre">kubectl</span></code> reads no
+variable for its context, and <code class="docutils literal notranslate"><span class="pre">run</span></code> is never passed through a shell, so write
+<code class="docutils literal notranslate"><span class="pre">[kubectl,</span> <span class="pre">--context,</span> <span class="pre">&quot;${deployment:kube_context}&quot;,</span> <span class="pre">...]</span></code>.</p></li>
+<li><p><strong>Waiting</strong> follows Kubernetes probes. Set on the block, and overridable per check:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">initial_delay</span></code></p></td>
+<td><p>10</p></td>
+<td><p>seconds before the first check (per check: before that check)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">period</span></code></p></td>
+<td><p>10</p></td>
+<td><p>seconds from one attempt’s start to the next</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">timeout</span></code></p></td>
+<td><p>30</p></td>
+<td><p>seconds one attempt may take; the command is then stopped</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">success_threshold</span></code></p></td>
+<td><p>1</p></td>
+<td><p>consecutive passes needed</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">failure_threshold</span></code></p></td>
+<td><p>30</p></td>
+<td><p>attempts that fail or are unknown before the check gives up</p></td>
+</tr>
+</tbody>
+</table>
+<p>With the defaults a workload has about five minutes to come up. <code class="docutils literal notranslate"><span class="pre">timeouts.verify</span></code> on the stage bounds the whole
+phase. A check whose answer keeps flipping between pass and fail stops after <code class="docutils literal notranslate"><span class="pre">failure_threshold</span> <span class="pre">+</span> <span class="pre">success_threshold</span> <span class="pre">-</span> <span class="pre">1</span></code> attempts and fails (“the answer keeps changing”). A <code class="docutils literal notranslate"><span class="pre">helm</span></code> check runs once.</p>
+</li>
+<li><p><strong>What a result does</strong>, as for the policy gates
+(<span class="xref myst">ADR-0067</span>): a failed check is an error with
+<code class="docutils literal notranslate"><span class="pre">enforcement:</span> <span class="pre">deny</span></code> (default), so the run stops and is <code class="docutils literal notranslate"><span class="pre">partial</span></code>; with <code class="docutils literal notranslate"><span class="pre">enforcement:</span> <span class="pre">warn</span></code> it is only a warning.
+An unknown answer follows <code class="docutils literal notranslate"><span class="pre">on_unknown</span></code>: <code class="docutils literal notranslate"><span class="pre">block</span></code> (default), <code class="docutils literal notranslate"><span class="pre">warn</span></code> or <code class="docutils literal notranslate"><span class="pre">skip</span></code>. A warn is always a warning. Nothing
+is rolled back. A stage check’s error fails its stage; a <code class="docutils literal notranslate"><span class="pre">spec.verify</span></code> error fails the run, not a stage.</p></li>
+<li><p><strong>When:</strong> a check’s <code class="docutils literal notranslate"><span class="pre">when</span></code> says after which action it runs: <code class="docutils literal notranslate"><span class="pre">[apply]</span></code> (default), <code class="docutils literal notranslate"><span class="pre">[destroy]</span></code>, or both. The
+<code class="docutils literal notranslate"><span class="pre">apply</span></code> checks run after each step of <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">apply</span></code>, then <code class="docutils literal notranslate"><span class="pre">spec.verify</span></code>’s once every step
+succeeded. The <code class="docutils literal notranslate"><span class="pre">destroy</span></code> checks run after each step of <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">destroy</span> <span class="pre">--force</span></code>, then <code class="docutils literal notranslate"><span class="pre">spec.verify</span></code>’s once every
+step was destroyed: they confirm what was removed is gone (<code class="docutils literal notranslate"><span class="pre">expect:</span> <span class="pre">down</span></code>, or a script that exits 0 when it
+is). A destroy check’s <code class="docutils literal notranslate"><span class="pre">${output:}</span></code> comes from the output store, read before the first step is destroyed.
+<code class="docutils literal notranslate"><span class="pre">spec.verify</span></code> is skipped, with a note, when <code class="docutils literal notranslate"><span class="pre">--stage</span></code>/<code class="docutils literal notranslate"><span class="pre">--scope</span></code> selects only some steps; after an apply, run
+<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">verify</span></code> once the whole deployment is out. <code class="docutils literal notranslate"><span class="pre">--no-verify</span></code> skips every check for one run; <code class="docutils literal notranslate"><span class="pre">enabled:</span> <span class="pre">false</span></code>
+turns a block or one check off. <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>, <code class="docutils literal notranslate"><span class="pre">--smoke-test</span></code> and <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">plan</span></code> only name the checks.</p></li>
+<li><p><strong>Across <code class="docutils literal notranslate"><span class="pre">extends</span></code>:</strong> a block’s fields deep-merge, and its <code class="docutils literal notranslate"><span class="pre">checks</span></code> merge by <code class="docutils literal notranslate"><span class="pre">name</span></code>: a child changes one of a
+base’s checks field by field, adds its own, or turns one off with <code class="docutils literal notranslate"><span class="pre">enabled:</span> <span class="pre">false</span></code>. A child writes only what it
+changes, without the check’s <code class="docutils literal notranslate"><span class="pre">type</span></code> or required fields:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">extends</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shop-base</span>
+<span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">step</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apply_web</span>
+<span class="w">      </span><span class="nt">verify</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">checks</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pods</span><span class="w">            </span><span class="c1"># the base's kubectl check; this deployment has no kube_context</span>
+<span class="w">            </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-health</span><span class="w">      </span><span class="c1"># the base's http check, with a longer timeout</span>
+<span class="w">            </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">60</span>
+</pre></div>
+</div>
+<p>A disabled check is not judged by <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>: its tokens need not resolve and its files need not exist.
+The merged deployment’s enabled checks are judged in full.</p>
+</li>
+<li><p><strong>Recorded:</strong> a <code class="docutils literal notranslate"><span class="pre">verify</span></code> phase in the audit manifest’s stage and each stage check’s answer, attempts, duration
+and message in <code class="docutils literal notranslate"><span class="pre">stages[].checks</span></code>; the <code class="docutils literal notranslate"><span class="pre">spec.verify</span></code> answers in the top-level <code class="docutils literal notranslate"><span class="pre">checks</span></code>; and <code class="docutils literal notranslate"><span class="pre">verified</span></code>: <code class="docutils literal notranslate"><span class="pre">true</span></code>
+when every check that ran answered pass or warn, <code class="docutils literal notranslate"><span class="pre">false</span></code> when one failed or could not answer (even with
+<code class="docutils literal notranslate"><span class="pre">enforcement:</span> <span class="pre">warn</span></code>), left out when no check ran. The metrics record count the checks (<code class="docutils literal notranslate"><span class="pre">checks_total</span></code>,
+<code class="docutils literal notranslate"><span class="pre">checks_failed</span></code>) and name the result (<code class="docutils literal notranslate"><span class="pre">verification</span></code>: <code class="docutils literal notranslate"><span class="pre">verified</span></code>, <code class="docutils literal notranslate"><span class="pre">verification_failed</span></code> or <code class="docutils literal notranslate"><span class="pre">not_verified</span></code>), and so
+do the events’ <code class="docutils literal notranslate"><span class="pre">labels.verification</span></code> and the handover document. A run that failed only because of its checks
+has <code class="docutils literal notranslate"><span class="pre">error_category:</span> <span class="pre">verification</span></code>: the steps were applied, and the workload does not work.</p></li>
+</ul>
+<section id="strata-deploy-verify">
+<h3><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">verify</span></code><a class="headerlink" href="#strata-deploy-verify" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>strata<span class="w"> </span>deploy<span class="w"> </span>verify<span class="w"> </span>DEPLOYMENT<span class="w"> </span><span class="o">[</span>--stage<span class="w"> </span>NAME<span class="o">]</span><span class="w"> </span><span class="o">[</span>--scope<span class="w"> </span>LABEL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--output<span class="w"> </span>json<span class="o">]</span>
+</pre></div>
+</div>
+<p>Runs the <code class="docutils literal notranslate"><span class="pre">apply</span></code> checks on their own, against what is deployed now, and changes nothing: after a manual change, in a later
+pipeline stage that deployed with <code class="docutils literal notranslate"><span class="pre">--no-verify</span></code>, or on a schedule the pipeline sets. Every selected stage’s block
+runs, then <code class="docutils literal notranslate"><span class="pre">spec.verify</span></code> (only when no <code class="docutils literal notranslate"><span class="pre">--stage</span></code>/<code class="docutils literal notranslate"><span class="pre">--scope</span></code> leaves a step out); a failure does not stop the others.
+The <code class="docutils literal notranslate"><span class="pre">initial_delay</span></code>s are not waited, since nothing was just started; the retries are. <code class="docutils literal notranslate"><span class="pre">${output:STEP.KEY}</span></code> comes
+from the workspace’s <code class="docutils literal notranslate"><span class="pre">output_store</span></code>, so a check that reads an output needs one (<code class="docutils literal notranslate"><span class="pre">verify_outputs_unavailable</span></code>
+otherwise). It writes no audit record. Exit codes: <code class="docutils literal notranslate"><span class="pre">0</span></code> no check ended in an error, <code class="docutils literal notranslate"><span class="pre">3</span></code> one did, <code class="docutils literal notranslate"><span class="pre">2</span></code> bad arguments.
+<code class="docutils literal notranslate"><span class="pre">--output</span> <span class="pre">json</span></code> puts <code class="docutils literal notranslate"><span class="pre">verified</span></code>, each stage’s <code class="docutils literal notranslate"><span class="pre">checks</span></code> and the deployment’s <code class="docutils literal notranslate"><span class="pre">checks</span></code> in <code class="docutils literal notranslate"><span class="pre">data</span></code>.</p>
+<p>Findings: <code class="docutils literal notranslate"><span class="pre">verify_check_failed</span></code>, <code class="docutils literal notranslate"><span class="pre">verify_check_unknown</span></code>, <code class="docutils literal notranslate"><span class="pre">verify_check_warning</span></code> from a check;
+<code class="docutils literal notranslate"><span class="pre">verify_deployment_skipped</span></code> (info), <code class="docutils literal notranslate"><span class="pre">verify_nothing_declared</span></code>, <code class="docutils literal notranslate"><span class="pre">verify_outputs_unavailable</span></code>,
+<code class="docutils literal notranslate"><span class="pre">verify_outputs_unusable</span></code>, <code class="docutils literal notranslate"><span class="pre">verify_no_steps</span></code> from the run; <code class="docutils literal notranslate"><span class="pre">verify_output_unavailable</span></code>, <code class="docutils literal notranslate"><span class="pre">verify_script_missing</span></code> and
+<code class="docutils literal notranslate"><span class="pre">verify_ca_file_unusable</span></code> from <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> also checks that the files of the solution an enabled check needs are there: the script a
+<code class="docutils literal notranslate"><span class="pre">script</span></code> check runs (<code class="docutils literal notranslate"><span class="pre">run[0]</span></code> when it is a path, or the script an interpreter runs, as in <code class="docutils literal notranslate"><span class="pre">[pwsh,</span> <span class="pre">-File,</span> <span class="pre">checks/x.ps1]</span></code> or <code class="docutils literal notranslate"><span class="pre">[python,</span> <span class="pre">checks/x.py]</span></code>), and an <code class="docutils literal notranslate"><span class="pre">http</span></code> check’s <code class="docutils literal notranslate"><span class="pre">ca_file</span></code>. Only relative paths without tokens are
+checked: a bare command is found on the <code class="docutils literal notranslate"><span class="pre">PATH</span></code> of the machine that deploys, and an absolute path names a file
+there. The design is in <span class="xref myst">post-deploy-verification.md</span>.</p>
 </section>
 </section>
 <section id="handover-document">

@@ -1,0 +1,398 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Check That a Deployed App Actually Works &mdash; strata 2.9.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=182a64a0"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Configuration Files" href="../config/readme.html" />
+    <link rel="prev" title="How To: Model your own structured data in properties and enforce its shape" href="structured-properties-with-attributeconfig.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="share-version-pins-across-workspaces.html">How To: Share version pins between products in one ring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Check That a Deployed App Actually Works</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#expose-what-the-check-needs">1. Expose what the check needs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#write-the-check">2. Write the check</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#add-it-to-the-deployment-s-stage">3. Add it to the deployment’s stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deploy">4. Deploy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#introduce-a-check-without-blocking">5. Introduce a check without blocking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#check-the-whole-deployment">6. Check the whole deployment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#check-again-later">7. Check again later</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#check-that-a-destroy-removed-it">8. Check that a destroy removed it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#run-a-helm-chart-s-own-tests">9. Run a Helm chart’s own tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#wait-for-a-gitops-controller">10. Wait for a GitOps controller</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Check That a Deployed App Actually Works</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/verify-a-deploy.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-check-that-a-deployed-app-actually-works">
+<h1>How To: Check That a Deployed App Actually Works<a class="headerlink" href="#how-to-check-that-a-deployed-app-actually-works" title="Link to this heading"></a></h1>
+<p>A deploy succeeds when its tool does. Terraform’s <code class="docutils literal notranslate"><span class="pre">apply</span></code> succeeds as soon as the cloud accepted the change, so a
+web app that never starts, because a configuration setting is missing, still ends in <code class="docutils literal notranslate"><span class="pre">success</span></code>. This guide adds a
+check that runs after the step, waits for the app to answer, and fails the run when it does not.</p>
+<p>The reference is <a class="reference internal" href="../config/deployment.html#verifying-a-deploy"><span class="std std-ref">Verifying a deploy</span></a>.</p>
+<section id="expose-what-the-check-needs">
+<span id="1-expose-what-the-check-needs"></span><h2>1. Expose what the check needs<a class="headerlink" href="#expose-what-the-check-needs" title="Link to this heading"></a></h2>
+<p>The check needs the app’s address. Make the Terraform root module output it:</p>
+<div class="highlight-hcl notranslate"><div class="highlight"><pre><span></span><span class="kr">output</span><span class="w"> </span><span class="nv">"default_hostname"</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="na">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nv">azurerm_linux_web_app.web.default_hostname</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> collects a step’s outputs right after its apply, so the check can read it as
+<code class="docutils literal notranslate"><span class="pre">${output:apply_web.default_hostname}</span></code>.</p>
+</section>
+<section id="write-the-check">
+<span id="2-write-the-check"></span><h2>2. Write the check<a class="headerlink" href="#write-the-check" title="Link to this heading"></a></h2>
+<p>A check is any command. Exit 0 when the app works, anything else when it does not; the first line you print becomes
+the check’s message in the run’s output and the audit record.</p>
+<p><code class="docutils literal notranslate"><span class="pre">checks/http-ok.ps1</span></code> (PowerShell 7):</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="k">param</span><span class="p">(</span><span class="no">[string]</span><span class="nv">$HostName</span><span class="p">)</span>
+<span class="k">try</span> <span class="p">{</span>
+    <span class="nv">$response</span> <span class="p">=</span> <span class="nb">Invoke-WebRequest</span> <span class="n">-Uri</span> <span class="s2">"https://$HostName/health"</span> <span class="n">-TimeoutSec</span> <span class="n">20</span> <span class="n">-SkipHttpErrorCheck</span>
+<span class="p">}</span>
+<span class="k">catch</span> <span class="p">{</span>
+    <span class="nb">Write-Output</span> <span class="s2">"no answer from $HostName: </span><span class="p">$(</span><span class="nv">$_</span><span class="p">.</span><span class="n">Exception</span><span class="p">.</span><span class="n">Message</span><span class="p">)</span><span class="s2">"</span>
+    <span class="n">exit</span> <span class="n">1</span>
+<span class="p">}</span>
+<span class="nb">Write-Output</span> <span class="s2">"HTTP </span><span class="p">$(</span><span class="nv">$response</span><span class="p">.</span><span class="n">StatusCode</span><span class="p">)</span><span class="s2"> from $HostName"</span>
+<span class="k">if</span> <span class="p">(</span><span class="nv">$response</span><span class="p">.</span><span class="n">StatusCode</span> <span class="o">-eq</span> <span class="n">200</span><span class="p">)</span> <span class="p">{</span> <span class="n">exit</span> <span class="n">0</span> <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> <span class="n">exit</span> <span class="n">1</span> <span class="p">}</span>
+</pre></div>
+</div>
+<p>Or <code class="docutils literal notranslate"><span class="pre">checks/http_ok.py</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.error</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.request</span>
+
+<span class="n">host</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="sa">f</span><span class="s2">"https://</span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">/health"</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span> <span class="k">as</span> <span class="n">response</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"HTTP </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">0</span> <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status</span> <span class="o">==</span> <span class="mi">200</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+<span class="k">except</span> <span class="n">urllib</span><span class="o">.</span><span class="n">error</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"HTTP </span><span class="si">{</span><span class="n">error</span><span class="o">.</span><span class="n">code</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no answer from </span><span class="si">{</span><span class="n">host</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Check the app, not the platform: a web app’s state says the site is running even while the application inside it
+fails at startup. A request to the app is what fails when its configuration is missing.</p>
+<p>For a plain request, a script is not needed: strata makes it itself with an <code class="docutils literal notranslate"><span class="pre">http</span></code> check (step 3 shows both). A
+<code class="docutils literal notranslate"><span class="pre">tcp</span></code> check (<code class="docutils literal notranslate"><span class="pre">host</span></code>, <code class="docutils literal notranslate"><span class="pre">port</span></code>) only tests that a port accepts connections, for a database or a message broker.</p>
+</section>
+<section id="add-it-to-the-deployment-s-stage">
+<span id="3-add-it-to-the-deployments-stage"></span><h2>3. Add it to the deployment’s stage<a class="headerlink" href="#add-it-to-the-deployment-s-stage" title="Link to this heading"></a></h2>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">step</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apply_web</span>
+<span class="w">      </span><span class="nt">verify</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">initial_delay</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">        </span><span class="nt">checks</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-answers</span>
+<span class="w">            </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">pwsh</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-File</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">checks/http-ok.ps1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"${output:apply_web.default_hostname}"</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">run</span></code> is an argument list run from the solution root, never a shell string. For the Python version:
+<code class="docutils literal notranslate"><span class="pre">run:</span> <span class="pre">[python,</span> <span class="pre">checks/http_ok.py,</span> <span class="pre">&quot;${output:apply_web.default_hostname}&quot;]</span></code>.</p>
+<p>The same check, built in:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-answers</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http</span>
+<span class="w">            </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://${output:apply_web.default_hostname}/health</span>
+<span class="w">            </span><span class="nt">expect_status</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span><span class="w">                </span><span class="c1"># the default; a list accepts several</span>
+</pre></div>
+</div>
+<p>When the app answers <code class="docutils literal notranslate"><span class="pre">application/health+json</span></code>, its <code class="docutils literal notranslate"><span class="pre">status</span></code> decides: <code class="docutils literal notranslate"><span class="pre">pass</span></code>, <code class="docutils literal notranslate"><span class="pre">warn</span></code> (degraded: a warning) or
+<code class="docutils literal notranslate"><span class="pre">fail</span></code>.</p>
+<p>Behind a private CA or a self-signed certificate, the request fails with “the certificate … is not trusted”.
+Give the check the CA to trust, as a PEM file in the solution, rather than turning the check off with <code class="docutils literal notranslate"><span class="pre">insecure</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">            </span><span class="nt">ca_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">certs/internal-ca.pem</span><span class="w">    </span><span class="c1"># relative to the solution root</span>
+</pre></div>
+</div>
+<p>A health endpoint that takes a query (GraphQL, for example) gets <code class="docutils literal notranslate"><span class="pre">method:</span> <span class="pre">POST</span></code> and a <code class="docutils literal notranslate"><span class="pre">body</span></code>, with its
+<code class="docutils literal notranslate"><span class="pre">Content-Type</span></code> in <code class="docutils literal notranslate"><span class="pre">headers</span></code>.</p>
+<p>The check is retried: here 30 seconds after the apply, then every 10 seconds, up to 30 attempts, so the app has about
+five minutes to come up. Tune it with <code class="docutils literal notranslate"><span class="pre">period</span></code>, <code class="docutils literal notranslate"><span class="pre">timeout</span></code> and <code class="docutils literal notranslate"><span class="pre">failure_threshold</span></code>.</p>
+<p>Run <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> before the first deploy. Besides the tokens, it reports a check script or <code class="docutils literal notranslate"><span class="pre">ca_file</span></code> that is not
+in the solution (<code class="docutils literal notranslate"><span class="pre">verify_script_missing</span></code>, <code class="docutils literal notranslate"><span class="pre">verify_ca_file_unusable</span></code>). Without it, the check could not answer, and
+the run would stop after the step was applied.</p>
+</section>
+<section id="deploy">
+<span id="4-deploy"></span><h2>4. Deploy<a class="headerlink" href="#deploy" title="Link to this heading"></a></h2>
+<p>The output, abridged, when the app never comes up:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>strata<span class="w"> </span>deploy<span class="w"> </span>run<span class="w"> </span>app<span class="w"> </span>--force
+<span class="go">  deployed step 'apply_web' via TerraformIntegration</span>
+<span class="go">  verify step 'apply_web': waiting 30s before the first check</span>
+<span class="go">  verify step 'apply_web': check 'web-answers' attempt 1 fail: HTTP 503 from web-prd.azurewebsites.net</span>
+<span class="go">  ...</span>
+<span class="go">  verify step 'apply_web': check 'web-answers' fail after 30 attempt(s): HTTP 500 from web-prd.azurewebsites.net</span>
+<span class="go">error: Step 'apply_web': verify check 'web-answers' failed after 30 attempt(s): HTTP 500 from</span>
+<span class="go">       web-prd.azurewebsites.net. The step was applied, but the deployment does not work as checked.</span>
+<span class="go">       [verify_check_failed]</span>
+</pre></div>
+</div>
+<p>The run exits 3 and its audit record is <code class="docutils literal notranslate"><span class="pre">partial</span></code>: the change was applied, and the record says the app did not work.
+Later steps do not run. Nothing is rolled back.</p>
+</section>
+<section id="introduce-a-check-without-blocking">
+<span id="5-introduce-a-check-without-blocking"></span><h2>5. Introduce a check without blocking<a class="headerlink" href="#introduce-a-check-without-blocking" title="Link to this heading"></a></h2>
+<p>While a check is new, let it report without failing the run:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">      </span><span class="nt">verify</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
+</pre></div>
+</div>
+<p>A failure is then a warning. Set it back to <code class="docutils literal notranslate"><span class="pre">deny</span></code> (the default) once the check is trusted. A check that cannot
+answer at all (its command missing, every attempt timing out) follows <code class="docutils literal notranslate"><span class="pre">on_unknown</span></code>: <code class="docutils literal notranslate"><span class="pre">block</span></code> (default), <code class="docutils literal notranslate"><span class="pre">warn</span></code> or
+<code class="docutils literal notranslate"><span class="pre">skip</span></code>.</p>
+<p>To deploy without the checks, for a pipeline that checks in a later stage, pass <code class="docutils literal notranslate"><span class="pre">--no-verify</span></code>.</p>
+</section>
+<section id="check-the-whole-deployment">
+<span id="6-check-the-whole-deployment"></span><h2>6. Check the whole deployment<a class="headerlink" href="#check-the-whole-deployment" title="Link to this heading"></a></h2>
+<p>A stage’s check runs right after its step. A check that needs everything in place, a request through the front door
+that reaches the API and the database, goes in <code class="docutils literal notranslate"><span class="pre">spec.verify</span></code> and runs once after every step:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deployment</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">verify</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">checks</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">checkout-flow</span>
+<span class="w">        </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">python</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">checks/checkout_flow.py</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"${output:apply_web.default_hostname}"</span><span class="p p-Indicator">]</span>
+<span class="w">        </span><span class="nt">env</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">API_KEY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${secret:SMOKE_API_KEY}</span>
+</pre></div>
+</div>
+<p>It may read the outputs of any step. It does not run when <code class="docutils literal notranslate"><span class="pre">--stage</span></code> or <code class="docutils literal notranslate"><span class="pre">--scope</span></code> deploys only some steps.</p>
+</section>
+<section id="check-again-later">
+<span id="7-check-again-later"></span><h2>7. Check again later<a class="headerlink" href="#check-again-later" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">verify</span></code> runs the same checks against what is deployed now, and changes nothing:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>strata<span class="w"> </span>deploy<span class="w"> </span>verify<span class="w"> </span>app
+<span class="go">  verify step 'apply_web': check 'web-answers' pass after 1 attempt(s): HTTP 200 from web-prd.azurewebsites.net</span>
+<span class="go">  verify the deployment: check 'checkout-flow' pass after 1 attempt(s): order 4711 placed</span>
+<span class="go">  verified: yes</span>
+</pre></div>
+</div>
+<p>It skips the initial delays, reads <code class="docutils literal notranslate"><span class="pre">${output:}</span></code> from the workspace’s <code class="docutils literal notranslate"><span class="pre">output_store</span></code>, and exits 3 when a check fails.
+A pipeline that deploys with <code class="docutils literal notranslate"><span class="pre">--no-verify</span></code> runs it in a later stage; a scheduled pipeline can run it to check the
+deployment keeps working.</p>
+</section>
+<section id="check-that-a-destroy-removed-it">
+<span id="8-check-that-a-destroy-removed-it"></span><h2>8. Check that a destroy removed it<a class="headerlink" href="#check-that-a-destroy-removed-it" title="Link to this heading"></a></h2>
+<p>A destroy succeeds when its tool does, too. A check with <code class="docutils literal notranslate"><span class="pre">when:</span> <span class="pre">[destroy]</span></code> runs after the step is destroyed, and
+<code class="docutils literal notranslate"><span class="pre">expect:</span> <span class="pre">down</span></code> passes once the app no longer answers:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web-gone</span>
+<span class="w">            </span><span class="nt">when</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">destroy</span><span class="p p-Indicator">]</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">http</span>
+<span class="w">            </span><span class="nt">url</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">https://${output:apply_web.default_hostname}/</span>
+<span class="w">            </span><span class="nt">expect</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">down</span>
+</pre></div>
+</div>
+<p>A script check can do the same (<code class="docutils literal notranslate"><span class="pre">STRATA_ACTION</span></code> is <code class="docutils literal notranslate"><span class="pre">destroy</span></code>): exit 0 when what it looks for is gone. The check’s
+<code class="docutils literal notranslate"><span class="pre">${output:}</span></code> comes from the output store, read before the first step is destroyed, so the workspace needs an
+<code class="docutils literal notranslate"><span class="pre">output_store</span></code>. A check that should run after both, such as one that tests a shared DNS name, says
+<code class="docutils literal notranslate"><span class="pre">when:</span> <span class="pre">[apply,</span> <span class="pre">destroy]</span></code>. <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">verify</span></code> runs only the <code class="docutils literal notranslate"><span class="pre">apply</span></code> checks.</p>
+</section>
+<section id="run-a-helm-chart-s-own-tests">
+<span id="9-run-a-helm-charts-own-tests"></span><h2>9. Run a Helm chart’s own tests<a class="headerlink" href="#run-a-helm-chart-s-own-tests" title="Link to this heading"></a></h2>
+<p>Helm already waits for a release to be ready before <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> goes on. A chart that ships tests (pods with the
+<code class="docutils literal notranslate"><span class="pre">helm.sh/hook:</span> <span class="pre">test</span></code> annotation) can also say whether the release <em>works</em>. A <code class="docutils literal notranslate"><span class="pre">helm</span></code> check runs them after the step:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">step</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apply_charts</span>
+<span class="w">      </span><span class="nt">verify</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">checks</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">chart-tests</span>
+<span class="w">            </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">helm</span>
+<span class="w">            </span><span class="nt">release</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">web</span><span class="w">                      </span><span class="c1"># as the step installed it</span>
+<span class="w">            </span><span class="nt">namespace</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">apps</span>
+<span class="w">            </span><span class="nt">timeout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">300</span><span class="w">                      </span><span class="c1"># helm test --timeout</span>
+</pre></div>
+</div>
+<p>It runs once, against the deployment’s <code class="docutils literal notranslate"><span class="pre">kube_context</span></code>: a failed test fails the step, and the message is Helm’s
+error. <code class="docutils literal notranslate"><span class="pre">tests:</span> <span class="pre">[web-test-connection]</span></code> runs only those tests. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">deploy</span> <span class="pre">verify</span></code> runs them again.</p>
+</section>
+<section id="wait-for-a-gitops-controller">
+<span id="10-wait-for-a-gitops-controller"></span><h2>10. Wait for a GitOps controller<a class="headerlink" href="#wait-for-a-gitops-controller" title="Link to this heading"></a></h2>
+<p>A GitOps step succeeds once its file is pushed; the Argo CD or Flux controller applies it later. strata does not
+call the controller, so wait for it with a check that reads the controller’s status. To wait until Flux reports the
+Kustomization ready, <code class="docutils literal notranslate"><span class="pre">kubectl</span></code> alone does, on the deployment’s cluster:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flux-ready</span>
+<span class="w">            </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">kubectl</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">--context</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"${deployment:kube_context}"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-n</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">flux-system</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">wait</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">kustomization/apps</span><span class="p p-Indicator">,</span>
+<span class="w">                  </span><span class="nv">--for=condition=Ready</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">--timeout=20s</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>Ready is not yet <em>this</em> deploy: the controller may still be on the previous commit. A script can compare the
+revision with the commit the step pushed. It reads the deployment’s context from <code class="docutils literal notranslate"><span class="pre">STRATA_KUBE_CONTEXT</span></code>, which every
+script check gets. <code class="docutils literal notranslate"><span class="pre">checks/flux-applied.ps1</span></code>:</p>
+<div class="highlight-powershell notranslate"><div class="highlight"><pre><span></span><span class="k">param</span><span class="p">(</span><span class="no">[string]</span><span class="nv">$Commit</span><span class="p">)</span>
+<span class="nv">$status</span> <span class="p">=</span> <span class="n">kubectl</span> <span class="p">-</span><span class="n">-context</span> <span class="nv">$env:STRATA_KUBE_CONTEXT</span> <span class="n">-n</span> <span class="n">flux-system</span> <span class="n">get</span> <span class="n">kustomization</span> <span class="n">apps</span> <span class="n">-o</span> <span class="n">json</span> <span class="p">|</span>
+    <span class="nb">ConvertFrom-Json</span>
+<span class="nv">$ready</span> <span class="p">=</span> <span class="nv">$status</span><span class="p">.</span><span class="n">status</span><span class="p">.</span><span class="n">conditions</span> <span class="p">|</span> <span class="nb">Where-Object</span> <span class="nb">type </span><span class="o">-eq</span> <span class="s1">'Ready'</span>
+<span class="k">if</span> <span class="p">(</span><span class="nv">$ready</span><span class="p">.</span><span class="n">status</span> <span class="o">-ne</span> <span class="s1">'True'</span><span class="p">)</span> <span class="p">{</span> <span class="nb">Write-Output</span> <span class="s2">"not ready: </span><span class="p">$(</span><span class="nv">$ready</span><span class="p">.</span><span class="n">message</span><span class="p">)</span><span class="s2">"</span><span class="p">;</span> <span class="n">exit</span> <span class="n">1</span> <span class="p">}</span>
+<span class="k">if</span> <span class="p">(</span><span class="nv">$status</span><span class="p">.</span><span class="n">status</span><span class="p">.</span><span class="n">lastAppliedRevision</span> <span class="o">-notlike</span> <span class="s2">"*$Commit"</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nb">Write-Output</span> <span class="s2">"ready, still at </span><span class="p">$(</span><span class="nv">$status</span><span class="p">.</span><span class="n">status</span><span class="p">.</span><span class="n">lastAppliedRevision</span><span class="p">)</span><span class="s2">"</span><span class="p">;</span> <span class="n">exit</span> <span class="n">1</span>
+<span class="p">}</span>
+<span class="nb">Write-Output</span> <span class="s2">"applied $Commit"</span>
+</pre></div>
+</div>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">step</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">publish_gitops</span>
+<span class="w">      </span><span class="nt">verify</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">checks</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flux-applied</span>
+<span class="w">            </span><span class="nt">run</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">pwsh</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-File</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">checks/flux-applied.ps1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"${output:publish_gitops.commit_sha}"</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>It passes only once the controller applied <em>this</em> commit, not an earlier one. For Argo CD, read the Application
+instead (<code class="docutils literal notranslate"><span class="pre">-n</span> <span class="pre">argocd</span> <span class="pre">get</span> <span class="pre">application</span> <span class="pre">apps</span></code>): <code class="docutils literal notranslate"><span class="pre">.status.sync.revision</span></code> is the commit, and <code class="docutils literal notranslate"><span class="pre">.status.health.status</span></code> must
+be <code class="docutils literal notranslate"><span class="pre">Healthy</span></code>. The check is retried every <code class="docutils literal notranslate"><span class="pre">period</span></code> seconds, so a controller that syncs every few minutes has the
+default five minutes to catch up; raise <code class="docutils literal notranslate"><span class="pre">failure_threshold</span></code> for a slower one.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="structured-properties-with-attributeconfig.html" class="btn btn-neutral float-left" title="How To: Model your own structured data in properties and enforce its shape" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../config/readme.html" class="btn btn-neutral float-right" title="Configuration Files" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

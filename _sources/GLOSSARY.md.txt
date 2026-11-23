@@ -133,6 +133,13 @@ Tears down what `deploy run` created, per provisioning step, in reverse dependen
 requires exactly one of `--force` (destroy), `--dry-run` (preview what would be removed) or `--smoke-test` (report
 only, no tool contact).
 
+### `strata deploy verify`
+
+Runs a deployment's `verify` checks (each stage's, then `spec.verify`) against what is deployed now, without
+changing anything. `deploy run` and `deploy apply` run the same checks after each step; this runs them on their
+own, later. Checks with `when: [destroy]` run only after `deploy destroy`, to confirm what was removed is gone.
+See [Verifying a deploy](config/deployment.md#verifying-a-deploy).
+
 ### Diagnostics
 
 The structured findings a validation or run produces — errors, warnings, and info messages, each
