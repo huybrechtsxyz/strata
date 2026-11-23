@@ -90,7 +90,9 @@ before upgrading.
   deployments, environments and tenants alike. Neither field was acted on yet, so no deploy ran differently.
 - On Windows, pulling a registry chart could fail now and then with "could not be stored ... Access is denied": a
   virus scanner reading the archive just pulled kept the cache's staging directory from being renamed into place.
-  The rename is now retried for about 3 seconds while a file in it is held open.
+  The rename is now retried for about 3 seconds while a file in it is held open. `build run --clean` and the
+  clearing of an asset slot before a build copies into it wait the same way, since they remove files an earlier
+  build may have written seconds before.
 - A hint on a finding from `strata validate` (such as `base_unused`, `document_unreferenced` or the
   `version_*` findings) could be lost when the finding was attributed to its file; it is now always shown.
 - An audit sink or GitOps step on a path remote no longer refuses its own commit when the actor has a space in it

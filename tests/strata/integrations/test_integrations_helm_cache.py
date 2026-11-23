@@ -21,7 +21,6 @@ from strata.integrations.helm import HelmIntegration
 from strata.integrations.helm_cache import (
     DIGEST_CHANGED,
     PULL_FAILED,
-    RELEASE_WAITS,
     STALE_STAGING_SECONDS,
     ChartPullError,
     Subchart,
@@ -32,6 +31,7 @@ from strata.integrations.helm_cache import (
     pull_chart,
     remove_stale_staging,
 )
+from strata.utils.file_release import RELEASE_WAITS
 from strata.utils.transport import CommandResult
 
 
@@ -308,6 +308,7 @@ def test_an_entry_that_cannot_be_stored_is_a_pull_failure(tmp_path: Path, monkey
         raise PermissionError(13, "Access is denied", str(source))
 
     monkeypatch.setattr(os, "replace", replace)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)  # the waits for a release that never comes
 
     with pytest.raises(ChartPullError) as raised:
         _pull(_FakeHelm(), tmp_path)

@@ -57,7 +57,7 @@ installed, and an unreachable registry fails the build, not a deploy half-way th
   HTTP and OCI. A pull lands in a temporary `.pull-*` directory in the cache and is renamed into place, so an
   interrupted pull leaves no partial entry. A rename refused because another process holds a file in it open
   (`PermissionError`: on Windows, a virus scanner reading the new archive) is retried for about 3 seconds
-  (`RELEASE_WAITS`); a rename that still fails, or fails otherwise, is `helm_chart_pull_failed`. Removing the temporary
+  (`utils/file_release.py`, `when_released()`, which `build run --clean` and an asset slot reset use too); a rename that still fails, or fails otherwise, is `helm_chart_pull_failed`. Removing the temporary
   directory is best effort, a leftover `.pull-*` is never read as an entry, and a pull removes those older than an hour
   (`STALE_STAGING_SECONDS`).
 - **Pin** (`_pin_registry_chart()`): an exact `chart_version` already cached is pinned from the cache; anything else is

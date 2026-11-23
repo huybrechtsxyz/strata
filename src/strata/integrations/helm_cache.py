@@ -13,7 +13,7 @@ import shutil
 import tarfile
 import tempfile
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,6 +22,7 @@ import yaml
 
 from strata.integrations.base import Integration
 from strata.integrations.errors import IntegrationError
+from strata.utils.file_release import when_released
 
 #: An exact SemVer 2 version, as Helm writes it in `Chart.yaml` (an optional leading `v`). Anything else is a
 #: constraint only the registry can resolve.
@@ -177,34 +178,17 @@ def pull_chart(
                 )
             return existing
         try:
+            # On Windows a virus scanner reading the archive just pulled holds the staging directory for a moment.
             if entry.exists():
                 # an incomplete entry from before entries were renamed into place
-                _when_released(lambda: shutil.rmtree(entry))
+                when_released(lambda: shutil.rmtree(entry))
             entry.parent.mkdir(parents=True, exist_ok=True)
-            _when_released(lambda: os.replace(staging, entry))
+            when_released(lambda: os.replace(staging, entry))
         except OSError as exc:
             raise ChartPullError(f"{wanted} at {pulled.version} could not be stored in {entry} — {exc}") from exc
     stored = cached_pin(cache_root, source, chart, pulled.version)
     assert stored is not None  # just renamed into place
     return stored
-
-
-#: The waits, in seconds, before each new attempt at a cache rename (about 3 seconds in all). On Windows a directory
-#: cannot be renamed or removed while another process holds a file in it open, and a virus scanner opens every
-#: archive just written for a moment: under load, long enough to fail the rename with "Access is denied".
-RELEASE_WAITS: tuple[float, ...] = (0.05, 0.1, 0.2, 0.4, 0.8, 1.6)
-
-
-def _when_released(action: Callable[[], object]) -> None:
-    """Run `action`, a rename or removal in the cache, and retry it while a file it touches is held open
-    (`PermissionError`) for up to `RELEASE_WAITS`. Any other error, or the last attempt's, is raised."""
-    for wait in RELEASE_WAITS:
-        try:
-            action()
-            return
-        except PermissionError:
-            time.sleep(wait)
-    action()
 
 
 def _unpack(archive: Path, destination: Path, wanted: str) -> Path:
