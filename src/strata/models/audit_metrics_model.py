@@ -24,6 +24,7 @@ action with no gates/approvals/lock/resource changes) and never a dry run
 """
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -45,7 +46,22 @@ class ErrorCategory(str, Enum):
     POLICY = "policy"
     NETWORK = "network"
     STATE_LOCK = "state_lock"
+    #: Every step applied, but a verify check failed: the workload, not the deploy, is the problem.
+    VERIFICATION = "verification"
     UNKNOWN = "unknown"
+
+
+#: Whether the run's verify checks said the deployment works (docs/design/post-deploy-verification.md, D9): the
+#: manifest's `verified` as one bounded word, for the metrics, the events and the handover document.
+Verification = Literal["verified", "verification_failed", "not_verified"]
+
+
+def verification_state(verified: bool | None) -> Verification:
+    """`verified` (every check that ran answered pass or warn), `verification_failed` (one failed or could not
+    answer) or `not_verified` (no check ran: none declared, or `--no-verify`)."""
+    if verified is None:
+        return "not_verified"
+    return "verified" if verified else "verification_failed"
 
 
 class MetricsDimensionsModel(PlatformBaseModel):
@@ -64,6 +80,11 @@ class MetricsDimensionsModel(PlatformBaseModel):
     tenant: str | None = Field(default=None, description="Tenant name, when applicable")
     actor: str | None = Field(default=None, description="Resolved actor identity — unbounded, see label_safe")
     commit_sha: str | None = Field(default=None, description="Git commit SHA — unbounded, see label_safe")
+    verification: Verification | None = Field(
+        default=None,
+        description="'verified' | 'verification_failed' | 'not_verified': what the run's verify checks said "
+        "(`verification_state()`); left out of records written before it existed",
+    )
 
 
 class MetricsMeasuresModel(PlatformBaseModel):
@@ -76,6 +97,14 @@ class MetricsMeasuresModel(PlatformBaseModel):
     policy_checks_total: int | None = Field(default=None, description="Total policy/gate checks evaluated")
     policy_checks_failed: int | None = Field(
         default=None, description="Policy/gate checks that did not pass, whatever their enforcement (deny, warn, audit)"
+    )
+    checks_total: int | None = Field(
+        default=None,
+        description="Verify checks that ran, the stages' and the deployment's; left out when none ran",
+    )
+    checks_failed: int | None = Field(
+        default=None,
+        description="Verify checks that failed or could not answer, whatever their enforcement; left out when none ran",
     )
 
 
@@ -97,7 +126,7 @@ class DeploymentMetricsModel(PlatformBaseModel):
         "(`audit_error_category.error_category()`)",
     )
     label_safe: list[str] = Field(
-        default_factory=lambda: ["outcome", "action", "environment", "tenant"],
+        default_factory=lambda: ["outcome", "action", "environment", "tenant", "verification"],
         description="Names of dimension keys with bounded cardinality — safe to promote to labels in a "
         "dimensional system (Prometheus, etc.). Excludes actor/commit_sha/execution_id, which are "
         "legitimate record attributes but unbounded.",

@@ -202,33 +202,6 @@ def test_merge_configurations_append_base_first_each_once():
     assert merged["configurations"] == ["base-config", "shared", "child-config"]
 
 
-def test_merge_health_checks_of_a_merged_stage_by_name():
-    """A child stage adding one check keeps the base's; the same name overrides field by field."""
-    base_checks = [
-        {"name": "api", "type": "http", "url": "https://api.base/health", "timeout": 5},
-        {"name": "db", "type": "tcp", "host": "db", "port": 5432},
-    ]
-    child_checks = [
-        {"name": "api", "type": "http", "url": "https://api.child/health"},
-        {"name": "cache", "type": "tcp", "host": "redis", "port": 6379},
-    ]
-    merged = merge_deployment_specs(
-        {"stages": [{"step": "apps", "health_checks": base_checks}]},
-        {"stages": [{"step": "apps", "health_checks": child_checks}]},
-    )
-    checks = merged["stages"][0]["health_checks"]
-    assert [check["name"] for check in checks] == ["api", "db", "cache"]
-    assert checks[0] == {"name": "api", "type": "http", "url": "https://api.child/health", "timeout": 5}
-
-
-def test_merge_health_checks_on_one_side_only_are_kept():
-    merged = merge_deployment_specs(
-        {"stages": [{"step": "apps", "health_checks": [{"name": "api", "type": "tcp", "host": "a", "port": 1}]}]},
-        {"stages": [{"step": "apps", "on_failure": "continue"}]},
-    )
-    assert merged["stages"][0]["health_checks"] == [{"name": "api", "type": "tcp", "host": "a", "port": 1}]
-
-
 def test_merge_keyed_list_never_merges_keyless_items():
     """An item without its key has no identity, so it is kept as-is rather than collapsed into another."""
     merged = merge_deployment_specs(
@@ -297,3 +270,50 @@ def test_merge_does_not_mutate_inputs():
     merge_deployment_specs(base, child)
     assert base == {"stages": [{"step": "infra"}], "environments": ["core-env"]}
     assert child == {"stages": [{"step": "extra"}], "environments": ["leaf-env"]}
+
+
+def test_merge_verify_checks_by_name_on_the_spec():
+    """docs/design/post-deploy-verification.md, D2: a child overrides one check and disables another, keeping the
+    base's block settings and its other checks."""
+    base = {
+        "verify": {
+            "enforcement": "warn",
+            "checks": [
+                {"name": "e2e", "run": ["check-e2e"], "timeout": 60},
+                {"name": "legacy", "run": ["check-legacy"]},
+            ],
+        }
+    }
+    child = {
+        "verify": {
+            "initial_delay": 30,
+            "checks": [
+                {"name": "e2e", "run": ["check-e2e", "--strict"]},
+                {"name": "legacy", "enabled": False},
+                {"name": "smoke", "run": ["check-smoke"]},
+            ],
+        }
+    }
+    merged = merge_deployment_specs(base, child)
+    assert merged["verify"] == {
+        "enforcement": "warn",
+        "initial_delay": 30,
+        "checks": [
+            {"name": "e2e", "run": ["check-e2e", "--strict"], "timeout": 60},
+            {"name": "legacy", "run": ["check-legacy"], "enabled": False},
+            {"name": "smoke", "run": ["check-smoke"]},
+        ],
+    }
+
+
+def test_merge_verify_checks_by_name_inside_a_merged_stage():
+    merged = merge_deployment_specs(
+        {"stages": [{"step": "apps", "verify": {"checks": [{"name": "web", "run": ["a"]}]}}]},
+        {"stages": [{"step": "apps", "verify": {"checks": [{"name": "api", "run": ["b"]}]}}]},
+    )
+    assert merged["stages"][0]["verify"]["checks"] == [{"name": "web", "run": ["a"]}, {"name": "api", "run": ["b"]}]
+
+
+def test_merge_verify_on_one_side_only_is_kept():
+    merged = merge_deployment_specs({"verify": {"checks": [{"name": "e2e", "run": ["a"]}]}}, {"workspace": "w"})
+    assert merged["verify"] == {"checks": [{"name": "e2e", "run": ["a"]}]}

@@ -112,6 +112,54 @@ def test_child_field_wins_over_the_base():
     assert resolved["leaf"].spec.workspace == "leaf-ws"
 
 
+def test_a_childs_defaults_never_overwrite_what_its_base_set():
+    """Each document is dumped as written (`exclude_unset`): a child that sets one field of `locking`, or tunes a
+    stage, must not reset the base's `locking.enabled`/`strategy` or re-enable a stage the base turned off with the
+    defaults it never wrote."""
+    index = _index(
+        _deployment(
+            "base",
+            {
+                "partial": True,
+                "workspace": "main",
+                "locking": {"enabled": True, "strategy": "wrap"},
+                "stages": [
+                    {
+                        "step": "a",
+                        "enabled": False,
+                        "on_failure": "continue",
+                        "verify": {
+                            "initial_delay": 45,
+                            "checks": [{"name": "web", "type": "http", "url": "https://x", "method": "HEAD"}],
+                        },
+                    }
+                ],
+            },
+        ),
+        _deployment(
+            "leaf",
+            {
+                "extends": "base",
+                "environments": ["prd"],
+                "locking": {"wait_timeout": "10m"},
+                "stages": [
+                    {"step": "a", "timeouts": {"apply": 600}, "verify": {"checks": [{"name": "web", "timeout": 60}]}}
+                ],
+            },
+        ),
+    )
+
+    resolved, diagnostics = resolve_deployment_chains(index)
+
+    assert diagnostics.ok, diagnostics.messages()
+    spec = resolved["leaf"].spec
+    assert (spec.locking.enabled, spec.locking.strategy, spec.locking.wait_timeout) == (True, "wrap", "10m")
+    [stage] = spec.stages
+    assert (stage.enabled, stage.on_failure, stage.timeouts.apply) == (False, "continue", 600)
+    [check] = stage.verify.checks
+    assert (stage.verify.initial_delay, check.type, check.method, check.timeout) == (45, "http", "HEAD", 60)
+
+
 # ---------------------------------------------------------------------------
 # Multi-level chains and shared ancestors
 # ---------------------------------------------------------------------------

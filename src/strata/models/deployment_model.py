@@ -83,45 +83,14 @@ def version_name_list(value: str | Sequence[str] | None) -> list[str]:
     return list(dict.fromkeys(name for name in names if name))
 
 
-class DeploymentHealthCheckModel(PlatformBaseModel):
-    """A reachability probe to run after a stage: an `http` check needs `url`, a `tcp` check needs `host`
-    and `port`. Accepted and validated, but strata does not use it yet.
-
-    Design notes:
-    A post-stage reachability probe.
-    """
-
-    schema_rules: ClassVar[tuple[str, ...]] = ("An `http` check needs `url`; a `tcp` check needs `host` and `port`.",)
-
-    name: PlatformName = Field(description="Unique health check name within the stage")
-    type: str = Field(description="Check type: `http` or `tcp`.\n\nDesign notes: Check type: 'http' or 'tcp'")
-    url: str | None = Field(None, description="URL to GET (http type)")
-    expect_status: int = Field(default=200, description="Expected HTTP status code (http type)")
-    host: str | None = Field(None, description="Hostname or IP (tcp type)")
-    port: int | None = Field(None, ge=1, le=65535, description="TCP port (tcp type)")
-    timeout: int = Field(default=10, ge=1, description="Connection/request timeout in seconds")
-
-    @field_validator("type")
-    @classmethod
-    def validate_check_type(cls, v: str) -> str:
-        """Only http and tcp probes exist."""
-        if v not in ("http", "tcp"):
-            raise ValueError(f"Health check type must be 'http' or 'tcp', got '{v}'")
-        return v
-
-    @model_validator(mode="after")
-    def validate_type_specific_fields(self) -> "DeploymentHealthCheckModel":
-        """An http check needs a url; a tcp check needs host and port."""
-        if self.type == "http" and self.url is None:
-            raise ValueError(f"Health check '{self.name}': 'url' is required for type 'http'.")
-        if self.type == "tcp" and (self.host is None or self.port is None):
-            raise ValueError(f"Health check '{self.name}': 'host' and 'port' are required for type 'tcp'.")
-        return self
-
-    # v1 additionally had `output_key`, binding a check's url/host to a
-    # preceding stage's provisioner output. Not ported for the same reason
-    # as DnsRecordModel.output_key (ADR-0006): it needs the shared runtime
-    # Context store, which does not exist in v2.
+def _health_check_replacement(probe: Any) -> str:
+    """A removed `health_checks` entry written as the `verify.checks` entry that replaces it."""
+    if not isinstance(probe, dict):
+        return "{...}"
+    keys = ("url", "expect_status") if probe.get("type") == "http" else ("host", "port")
+    fields = [f"name: {probe.get('name')}", f"type: {probe.get('type')}"]
+    fields += [f"{key}: {probe[key]}" for key in (*keys, "timeout") if probe.get(key) is not None]
+    return "{" + ", ".join(fields) + "}"
 
 
 class DeploymentStageTimeoutsModel(PlatformBaseModel):
@@ -137,21 +106,311 @@ class DeploymentStageTimeoutsModel(PlatformBaseModel):
     plan: int | None = Field(None, ge=1, description="Timeout for the plan phase")
     apply: int | None = Field(None, ge=1, description="Timeout for the apply phase")
     destroy: int | None = Field(None, ge=1, description="Timeout for the destroy phase")
+    verify: int | None = Field(
+        None,
+        ge=1,
+        description="Timeout for the verify phase: every check of the stage's `verify` block together. Without it, "
+        "the checks' own timing bounds the phase.",
+    )
+
+
+#: The timing fields a `verify` block sets and a check may override: Kubernetes probe fields, in seconds
+#: (docs/design/post-deploy-verification.md, D4).
+VERIFY_TIMING_FIELDS = ("initial_delay", "period", "timeout", "success_threshold", "failure_threshold")
+
+
+#: A verify check's `when`: after an apply (and under `deploy verify`), or after a destroy.
+VerifyWhen = Literal["apply", "destroy"]
+
+#: The fields each check `type` may set, beyond the shared ones (`name`, `enabled`, `when`, the timing fields).
+_VERIFY_TYPE_FIELDS: dict[str, tuple[str, ...]] = {
+    "script": ("run", "env", "exit_codes"),
+    "http": ("url", "method", "headers", "body", "expect_status", "ca_file", "insecure", "expect"),
+    "tcp": ("host", "port", "expect"),
+    "helm": ("release", "namespace", "tests", "env"),
+}
+
+
+class DeploymentVerifyCheckModel(PlatformBaseModel):
+    """One check run after the step is applied (or destroyed, with `when: [destroy]`).
+
+    - `script` runs `run` and reads its exit code: with `exit_codes: binary` (default) 0 passes and anything else
+      fails; with `monitoring` (the Nagios/Icinga plugin convention) 0 passes, 1 warns, 2 fails and 3 is unknown. A
+      command that times out or cannot start is unknown. The first line it prints is the check's message.
+    - `http` requests `url` and passes when the status is in `expect_status`; an `application/health+json` answer's
+      `status` (`pass`, `warn`, `fail`) decides instead. No answer at all fails. `ca_file` trusts a private CA;
+      `insecure` skips the certificate check.
+    - `tcp` passes when a connection to `host`:`port` opens.
+    - `helm` runs the chart's own tests (`helm test release`) once, against the deployment's `kube_context`: 0
+      passes, anything else fails. Only after an apply.
+
+    `expect: down` turns an `http` or `tcp` check around, for a destroy: it passes when there is no answer (or not
+    the expected status). Timing fields left out come from the `verify` block.
+
+    Design notes:
+    docs/design/post-deploy-verification.md, D5, D6, D10. `run` is an argument list, never a shell string. `when`, not
+    `on`: YAML 1.1 (PyYAML) reads an `on:` key as `true`.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`run` is an argument list: the executable, then its arguments.",
+        "An enabled `script` check needs `run`; an `http` check needs `url`; a `tcp` check needs `host` and `port`; "
+        "a `helm` check needs `release`. A field of another type is refused. Judged on the merged deployment: in a "
+        "deployment that `extends` a base, a check writes only what it changes in the base's check of that `name`.",
+        "A `helm` check runs only after an apply: `when: [destroy]` is refused.",
+    )
+
+    name: PlatformName = Field(description="Unique check name within the `verify` block")
+    enabled: bool = Field(
+        default=True,
+        description="Run this check. `false` skips it: how a deployment that `extends` a base turns off one of the "
+        "base's checks (checks merge by `name`).",
+    )
+    type: Literal["script", "http", "tcp", "helm"] = Field(
+        default="script",
+        description="Check type: `script` (a command's exit code), `http` (a request's status), `tcp` (a "
+        "connection) or `helm` (the chart's own tests, `helm test`).",
+    )
+    when: list[VerifyWhen] = Field(
+        default_factory=lambda: list[VerifyWhen](["apply"]),
+        min_length=1,
+        description="When the check runs: after an `apply` (default; also under `deploy verify`), after a "
+        "`destroy`, or both. A destroy check confirms the workload is gone.",
+    )
+    run: list[str] | None = Field(
+        None,
+        min_length=1,
+        description="`script`: the command, as a list: the executable (on PATH, or a path relative to the solution "
+        "root), then its arguments. Tokens (`${var:}`, `${secret:}`, `${output:STEP.KEY}`, ...) are resolved. Run "
+        "from the solution root, never through a shell.",
+    )
+    env: dict[str, str] | None = Field(
+        None,
+        description="Extra environment variables for the command; tokens are resolved. Prefer this to `run` for a "
+        "secret: an argument shows in the process list.",
+    )
+    exit_codes: Literal["binary", "monitoring"] = Field(
+        default="binary",
+        description="`script`: how the exit code is read: `binary` (0 passes, anything else fails) or `monitoring` "
+        "(0 passes, 1 warns, 2 fails, 3 is unknown).",
+    )
+    url: str | None = Field(
+        None, description="`http`: the `http://` or `https://` URL to request; tokens are resolved."
+    )
+    method: Literal["GET", "HEAD", "OPTIONS", "POST"] = Field(
+        default="GET",
+        description="`http`: the request method. `POST` is for a health endpoint that takes a query (GraphQL, a "
+        "JSON-RPC ping); a check should never change what it checks.",
+    )
+    headers: dict[str, str] | None = Field(
+        None,
+        description="`http`: request headers; tokens are resolved, so `Authorization: Bearer ${secret:TOKEN}` works.",
+    )
+    body: str | None = Field(
+        None,
+        description="`http`: the request body, sent with `method: POST`; tokens are resolved. Set its "
+        "`Content-Type` in `headers`.",
+    )
+    # At least one status: with none, an `expect: up` check could never pass and an `expect: down` one never fail.
+    expect_status: (
+        Annotated[int, Field(ge=100, le=599)]
+        | Annotated[list[Annotated[int, Field(ge=100, le=599)]], Field(min_length=1)]
+    ) = Field(
+        default=200,
+        description="`http`: the status (or statuses, at least one) that mean the workload answers. A redirect is "
+        "followed first.",
+    )
+    ca_file: str | None = Field(
+        None,
+        description="`http`: a PEM file of the certificate authorities to trust instead of the system's, for a "
+        "private CA or a self-signed certificate; a path relative to the solution root. The certificate and host "
+        "name are still checked.",
+    )
+    insecure: bool = Field(
+        default=False,
+        description="`http`: `true` skips the certificate check altogether. The check's message says so. Prefer "
+        "`ca_file`, which still checks who answers.",
+    )
+    host: str | None = Field(None, description="`tcp`: the host name or address to connect to; tokens are resolved.")
+    port: int | None = Field(None, ge=1, le=65535, description="`tcp`: the port to connect to")
+    release: str | None = Field(
+        None, description="`helm`: the release whose tests run, as the step installed it; tokens are resolved."
+    )
+    namespace: str | None = Field(
+        None, description="`helm`: the release's Kubernetes namespace; tokens are resolved. Helm's default without it."
+    )
+    tests: list[str] | None = Field(
+        None,
+        min_length=1,
+        description="`helm`: run only these tests (their pod names, `helm test --filter name=...`); all of them "
+        "without it.",
+    )
+    expect: Literal["up", "down"] = Field(
+        default="up",
+        description="`http`/`tcp`: `up` (default) passes when the workload answers; `down` passes when it does not "
+        "(no connection, or for `http` a status not in `expect_status`), for a check after a destroy.",
+    )
+    initial_delay: int | None = Field(None, ge=0, description="Seconds to wait before this check's first attempt")
+    period: int | None = Field(None, ge=1, description="Seconds from one attempt's start to the next")
+    timeout: int | None = Field(None, ge=1, description="Seconds one attempt may take; the command is then stopped")
+    success_threshold: int | None = Field(None, ge=1, description="Consecutive passes needed")
+    failure_threshold: int | None = Field(
+        None, ge=1, description="Attempts that fail or are unknown before it gives up"
+    )
+
+    @field_validator("run")
+    @classmethod
+    def validate_run(cls, v: list[str] | None) -> list[str] | None:
+        """The executable must be named."""
+        if v is not None and not v[0].strip():
+            raise ValueError("run: the first element is the executable and must not be empty")
+        return v
+
+    @field_validator("when")
+    @classmethod
+    def validate_when(cls, v: list[VerifyWhen]) -> list[VerifyWhen]:
+        """Each action once."""
+        return list(dict.fromkeys(v))
+
+    def problems(self) -> list[str]:
+        """What makes the check unusable: a required field of its type missing (only when enabled: a disabled check
+        never runs), a field of another type set, or an option combination that cannot work.
+
+        Judged on a complete deployment (`DeploymentSpecModel.validate_verify_checks()`), not on the check alone: in
+        a document that `extends` a base, a check may name only what it changes (`{name: web, enabled: false}`), its
+        type and other fields coming from the base's check of the same name."""
+        problems: list[str] = []
+        required = {"script": ("run",), "http": ("url",), "tcp": ("host", "port"), "helm": ("release",)}[self.type]
+        missing = [name for name in required if getattr(self, name) is None]
+        if missing and self.enabled:
+            problems.append(f"type '{self.type}' needs {' and '.join(repr(n) for n in missing)}")
+        own = _VERIFY_TYPE_FIELDS[self.type]
+        # By value, not `model_fields_set`: a merged check holds every field the base or the child set.
+        fields = type(self).model_fields
+        foreign = sorted(
+            {
+                name
+                for other, names in _VERIFY_TYPE_FIELDS.items()
+                if other != self.type
+                for name in names
+                if name not in own and getattr(self, name) != fields[name].get_default(call_default_factory=True)
+            }
+        )
+        if foreign:
+            problems.append(f"{', '.join(repr(n) for n in foreign)} do not apply to type '{self.type}'")
+        if self.type == "helm" and "destroy" in self.when:
+            problems.append(
+                "a 'helm' check runs the release's tests, so it cannot run after a destroy; check that the workload "
+                "is gone with an 'http' or 'tcp' check and 'expect: down'"
+            )
+        if self.body is not None and self.method != "POST":
+            problems.append("'body' is sent only with method 'POST'")
+        if self.ca_file is not None and self.insecure:
+            problems.append(
+                "'ca_file' and 'insecure' exclude each other: 'ca_file' checks the certificate against your CA, "
+                "'insecure' skips the check"
+            )
+        return [f"verify check '{self.name}': {problem}" for problem in problems]
+
+    def expected_statuses(self) -> list[int]:
+        """`expect_status` as a list."""
+        return [self.expect_status] if isinstance(self.expect_status, int) else list(self.expect_status)
+
+    def runs_on(self, action: str) -> bool:
+        """Whether the check runs for `action`: `apply` and `verify` (the stand-alone command) run the `apply`
+        checks, `destroy` the `destroy` ones."""
+        return ("destroy" if action == "destroy" else "apply") in self.when
+
+    def token_fields(self) -> list[tuple[str, str]]:
+        """Every field whose `${...}` tokens are resolved, as `(path below the check, text)`."""
+        fields = [(f"run.{i}", text) for i, text in enumerate(self.run or [])]
+        fields += [(f"env.{key}", text) for key, text in (self.env or {}).items()]
+        if self.url is not None:
+            fields.append(("url", self.url))
+        fields += [(f"headers.{key}", text) for key, text in (self.headers or {}).items()]
+        if self.body is not None:
+            fields.append(("body", self.body))
+        if self.host is not None:
+            fields.append(("host", self.host))
+        if self.release is not None:
+            fields.append(("release", self.release))
+        if self.namespace is not None:
+            fields.append(("namespace", self.namespace))
+        return fields
+
+
+class DeploymentVerifyModel(PlatformBaseModel):
+    """Checks that the deployment works once applied: a stage's block after its step, `spec.verify` after every
+    step. Each check is retried until it passes, or until
+    `failure_threshold` attempts have failed. The timing follows Kubernetes probes: wait `initial_delay` seconds,
+    then try every `period` seconds, each attempt limited to `timeout`. With the defaults that is about five minutes
+    for a workload to come up. A check that fails is an error with `enforcement: deny` (the stage fails) or a
+    warning with `warn`; one that cannot answer follows `on_unknown`. Runs on `deploy run` and `deploy apply`, and
+    its `when: [destroy]` checks on `deploy destroy`; `--no-verify` skips it. `deploy verify` runs the `apply`
+    checks on their own, against what is deployed.
+
+    Design notes:
+    docs/design/post-deploy-verification.md, D1 (policy semantics), D2, D3, D4, D6, D7; ADR-0066.
+    """
+
+    schema_rules: ClassVar[tuple[str, ...]] = ("Check names must be unique within the block.",)
+
+    enabled: bool = Field(default=True, description="Run these checks. `false` keeps them declared but skipped.")
+    enforcement: Literal["deny", "warn"] = Field(
+        default="deny",
+        description="What a failed check does: `deny` fails the stage, `warn` only reports it (for a check being "
+        "introduced).",
+    )
+    on_unknown: Literal["block", "warn", "skip"] = Field(
+        default="block",
+        description="What a check that could not answer (timed out, could not start, exit 3 with `monitoring`) "
+        "does: `block` fails the stage, `warn` reports it, `skip` only notes it.",
+    )
+    initial_delay: int = Field(default=10, ge=0, description="Seconds to wait after the apply, before the first check")
+    period: int = Field(default=10, ge=1, description="Seconds from one attempt's start to the next")
+    timeout: int = Field(default=30, ge=1, description="Seconds one attempt may take; the command is then stopped")
+    success_threshold: int = Field(default=1, ge=1, description="Consecutive passes a check needs")
+    failure_threshold: int = Field(
+        default=30, ge=1, description="Attempts that fail or are unknown before a check gives up"
+    )
+    checks: list[DeploymentVerifyCheckModel] = Field(min_length=1, description="The checks, run in order")
+
+    @model_validator(mode="after")
+    def validate_unique_check_names(self) -> "DeploymentVerifyModel":
+        """Check names must be unique within the block."""
+        check_unique_names([check.name for check in self.checks], "verify check names")
+        return self
 
 
 class DeploymentStageModel(PlatformBaseModel):
     """Runtime parameters for one provisioning step of the workspace, named by `step`. A stage never
-    redefines what runs. Today strata applies only `timeouts`; the other fields are accepted and
+    redefines what runs. Today strata applies `timeouts` and `verify`; the other fields are accepted and
     validated but not used yet.
 
     Design notes:
-    Runtime parameters for one provisioning step.
+    Runtime parameters for one provisioning step. `verify` is applied too (docs/design/post-deploy-verification.md).
 
     Names a `ProvisioningStepModel` from the workspace's recipe via `step`;
     it does not redefine what runs (see module docstring).
     """
 
-    schema_rules: ClassVar[tuple[str, ...]] = ("Health check names must be unique within the stage.",)
+    schema_rules: ClassVar[tuple[str, ...]] = (
+        "`health_checks` was removed in 2.9: write each probe as a `verify.checks` entry of `type: http` or `tcp`.",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_removed_health_checks(cls, value: Any) -> Any:
+        """`health_checks` was removed (ADR-0068): say so and give the `verify.checks` entries that replace it,
+        instead of pydantic's generic "extra inputs are not permitted"."""
+        if isinstance(value, dict) and "health_checks" in value:
+            probes = value["health_checks"] if isinstance(value["health_checks"], list) else []
+            replacement = ", ".join(_health_check_replacement(probe) for probe in probes) or "[]"
+            raise ValueError(
+                "'health_checks' was removed in strata 2.9: it never ran. Move each probe to the stage's "
+                f"'verify.checks', where it runs: checks: [{replacement}]."
+            )
+        return value
 
     step: PlatformName = Field(
         description="Name of the workspace `execution` step these parameters apply to.\n\n"
@@ -181,11 +440,10 @@ class DeploymentStageModel(PlatformBaseModel):
         description="Per-phase timeout overrides, applied by `deploy run`.\n\n"
         "Design notes: Per-phase timeout overrides for this stage",
     )
-    health_checks: list[DeploymentHealthCheckModel] | None = Field(
+    verify: DeploymentVerifyModel | None = Field(
         None,
-        description="Reachability probes to run after this stage succeeds. Accepted and validated, "
-        "but strata does not use it yet.\n\n"
-        "Design notes: Reachability probes run after this stage succeeds",
+        description="Checks run after this stage's step is applied (or, with `when: [destroy]`, destroyed), which "
+        "decide whether the deploy worked.",
     )
     scripts: ScriptsModel | None = Field(
         None,
@@ -235,13 +493,6 @@ class DeploymentStageModel(PlatformBaseModel):
         if isinstance(v, str) and not v.strip():
             raise ValueError("enabled: a conditional expression must not be empty")
         return v
-
-    @model_validator(mode="after")
-    def validate_unique_health_check_names(self) -> "DeploymentStageModel":
-        """Health check names must be unique within the stage."""
-        if self.health_checks:
-            check_unique_names([h.name for h in self.health_checks], f"health check names in stage '{self.step}'")
-        return self
 
 
 class DeploymentDocumentationModel(PlatformBaseModel):
@@ -471,6 +722,12 @@ class DeploymentSpecModel(PlatformBaseModel):
     stages: list[DeploymentStageModel] | None = Field(
         None, description="Runtime parameters per workspace provisioning step"
     )
+    verify: DeploymentVerifyModel | None = Field(
+        None,
+        description="Checks for the deployment as a whole (an end-to-end request, a smoke transaction), run once "
+        "after every step was applied. Skipped when `--stage`/`--scope` selects only some steps; `deploy verify` "
+        "runs them on their own. Checks merge by `name` across `extends`.",
+    )
     providers: list[DeploymentProviderBindingModel] | None = Field(
         None,
         description="Rebind workspace provider slots to other Provider documents for this deployment. "
@@ -570,6 +827,30 @@ class DeploymentSpecModel(PlatformBaseModel):
                 f"Deployment is missing required field(s) {missing}. Set 'partial: true' if this is a "
                 "reusable base, or 'extends' if another document supplies them."
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_verify_checks(self) -> "DeploymentSpecModel":
+        """Every `verify` check is usable (`DeploymentVerifyCheckModel.problems()`).
+
+        A document with `extends` is exempt, like `validate_complete_unless_partial()`: its checks may name only what
+        they change in the base's check of the same name (`{name: web, enabled: false}`, `{name: web, timeout: 60}`),
+        and their type comes from the base. The merged result is validated without `extends`, so every check that is
+        deployed is judged. A `partial: true` base without `extends` writes its checks in full and is judged here.
+        """
+        if self.extends:
+            return self
+        blocks = [(f"stages[{index}].verify", stage.verify) for index, stage in enumerate(self.stages or [])]
+        blocks.append(("verify", self.verify))
+        problems = [
+            f"{path}.checks[{index}]: {problem}"
+            for path, block in blocks
+            if block is not None
+            for index, check in enumerate(block.checks)
+            for problem in check.problems()
+        ]
+        if problems:
+            raise ValueError("; ".join(problems))
         return self
 
 

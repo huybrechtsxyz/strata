@@ -661,7 +661,8 @@ def test_shipped_example_passes_its_state_key_to_terraform_init(tmp_path):
         assert context.ok, context.diagnostics.messages()
         build_path = tmp_path / "build"
         assert build_run(context, "prd-deployment", build_path).ok
-        diagnostics = deploy_run(open_solution(root), "prd-deployment", build_path, force=True)
+        # The example's `verify` check requests a real URL after the apply; it is not what this test is about.
+        diagnostics = deploy_run(open_solution(root), "prd-deployment", build_path, force=True, verify=False)
 
     assert diagnostics.ok, diagnostics.messages()
     init_call = next(call for call in calls if call[:2] == ["terraform", "init"])

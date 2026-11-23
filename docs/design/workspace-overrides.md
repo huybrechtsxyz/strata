@@ -58,7 +58,7 @@ collection merges by its key, a plain list replaces.**
 | ---------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Maps (`locking`, `properties`, `custom`, ...)  | deep-merged per leaf key, child wins                                                      |
 | `stages`, `providers`, `assets`                | by `step`, `slot`, `slot` (`LIST_MERGE_KEYS`): a child item deep-merges over the base's, new keys append |
-| a merged stage's `health_checks`               | by `name` (`NESTED_LIST_MERGE_KEYS`), the same way                                        |
+| `verify.checks`, on the spec and in a merged stage | by `name` (`VERIFY_CHECK_MERGE_KEY`), the same way; `health_checks` was removed in 2.9 |
 | `environments`, `configurations`               | the base's names, then the child's new ones (`APPEND_LISTS`); later environments win at value resolution |
 | `version`                                      | the base's documents, then the child's, each once ([version-composition.md](version-composition.md)) |
 | any other list                                 | replaced by the child's                                                                   |

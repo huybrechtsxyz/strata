@@ -68,9 +68,20 @@ from strata.controllers.value_controller import (
     resolve_values,
     secret_records,
 )
+from strata.controllers.verification import (
+    Action,
+    VerifyReport,
+    check_records,
+    has_checks,
+    output_steps,
+    run_verify_block,
+    verify_diagnostics,
+    would_verify,
+)
 from strata.controllers.version_composition import deployment_version
 from strata.controllers.workload_controller import resolve_namespace_modules
 from strata.integrations.capabilities import InfraIntegration
+from strata.integrations.compose import ComposeIntegration
 from strata.integrations.errors import CheckPhaseUnsupportedError, IntegrationError, RegistryAuthError
 from strata.integrations.gitops import BaseGitOpsIntegration
 from strata.integrations.helm import (
@@ -90,7 +101,14 @@ from strata.integrations.terraform_projection import (
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
-from strata.models.deployment_model import DeploymentSpecModel, DeploymentStageModel, VersionPins, version_name_list
+from strata.models.deployment_model import (
+    DeploymentModel,
+    DeploymentSpecModel,
+    DeploymentStageModel,
+    DeploymentVerifyModel,
+    VersionPins,
+    version_name_list,
+)
 from strata.models.integration_model import Capability, IntegrationModel
 from strata.models.namespace_model import NamespaceModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
@@ -108,6 +126,7 @@ from strata.services.environment_service import (
 )
 from strata.services.workspace_service import effective_assets
 from strata.utils.builtin_types import ProvisionerType
+from strata.utils.dependency_order import upstream_of
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import SystemError, UsageError
 from strata.utils.layout import helm_cache_dir
@@ -218,7 +237,7 @@ def _timeout_kwargs(step: ProvisioningStepModel, stage: DeploymentStageModel | N
     the fallback. `stage` is this step's `DeploymentStageModel` (matched by
     `stage.step == step.name`), not a field on the step/workspace side:
     timeouts are a deploy-time runtime knob, same as this model's sibling
-    `health_checks`/`secrets`/`namespace` fields — a given Workspace recipe
+    `verify`/`secrets`/`namespace` fields — a given Workspace recipe
     is reused by many Deployments/Environments, so a timeout bump for one
     slow environment must not force every other Deployment of that same
     Workspace to carry it too.
@@ -379,20 +398,10 @@ def _upstream_step_names(step_name: str, steps: list[ProvisioningStepModel]) -> 
     """Every step `step_name` (transitively) `depends_on` — the set a step may
     reference via `${output:X.key}` (docs/design/deploy-command.md's
     "Cross-step output context": dependency-scoped, not v1's global pool).
-    Mirrors `provisioning_model.py`'s own (private) `reachable_from()`
-    computed there for a different check (shared-target ambiguity) — not
-    reused directly since that one is nested inside a validator, not
-    exported.
+    `strata validate` judges a verify check's `${output:}` by the same
+    `upstream_of()`.
     """
-    graph = {s.name: set(s.depends_on or []) for s in steps}
-    seen: set[str] = set()
-    stack = list(graph.get(step_name, ()))
-    while stack:
-        node = stack.pop()
-        if node not in seen:
-            seen.add(node)
-            stack.extend(graph.get(node, ()))
-    return seen
+    return upstream_of(step_name, {s.name: s.depends_on or [] for s in steps})
 
 
 def _merge_durable_outputs(
@@ -673,6 +682,146 @@ def _destroy_step(
         return False
     on_step(f"destroyed step '{step.name}' via {integration_type}")
     return True
+
+
+def _verify_step(
+    stage: DeploymentStageModel | None,
+    step: ProvisioningStepModel,
+    *,
+    deployment: str,
+    tokens: Mapping[str, str],
+    root: Path,
+    redact: Callable[[str], str],
+    on_step: Callable[[str], None],
+    on_line: Callable[[str, str, str], None] | None,
+    log: StageLog,
+    diagnostics: Diagnostics,
+    environment: Mapping[str, str] | None = None,
+    action: Action = "apply",
+) -> bool:
+    """Run the stage's `verify` checks for `action` after its step was applied or destroyed
+    (docs/design/post-deploy-verification.md, D6). `False` means the run must stop: a check ended in an error (D7). A
+    stage with no enabled check for `action` is left alone."""
+    block = stage.verify if stage is not None else None
+    if block is None or not has_checks(block, action):
+        return True
+    log.phase("verify")
+    results = run_verify_block(
+        block,
+        deployment=deployment,
+        step=step.name,
+        tokens=tokens,
+        root=root,
+        redact=redact,
+        phase_timeout=_timeout_kwargs(step, stage, "verify").get("timeout"),
+        on_step=on_step,
+        line_callback=(lambda stream, text: on_line("verify", stream, text)) if on_line is not None else None,
+        action=action,
+        environment=environment,
+    )
+    log.record_checks(step.name, check_records(results))
+    findings = verify_diagnostics(block, results, step=step.name, action=action)
+    diagnostics.extend(findings)
+    log.end_phase()
+    return findings.ok
+
+
+def _verify_deployment(
+    deployment: DeploymentModel,
+    *,
+    partial: bool,
+    preview: bool,
+    tokens: Mapping[str, str],
+    root: Path,
+    redact: Callable[[str], str],
+    on_step: Callable[[str], None],
+    on_line: Callable[[str, str, str], None] | None,
+    log: StageLog,
+    diagnostics: Diagnostics,
+    environment: Mapping[str, str] | None = None,
+    action: Action = "apply",
+) -> None:
+    """Run the deployment's `spec.verify` checks for `action` after every step was applied or destroyed (D2, D6).
+    Not when `--stage`/`--scope` left steps out (`partial`): an end-to-end check needs the whole deployment.
+    `preview` (`--dry-run`/`--smoke-test`) only names the checks. A finding has no location: it fails the run, not
+    a stage."""
+    block = deployment.spec.verify
+    if block is None or not has_checks(block, action):
+        return
+    if partial:
+        later = (
+            f" Run 'strata deploy verify {deployment.meta.name}' once every step is deployed."
+            if action == "apply"
+            else ""
+        )
+        diagnostics.info(
+            f"The deployment's verify checks did not run: --stage/--scope selected only some steps.{later}",
+            code="verify_deployment_skipped",
+        )
+        return
+    if preview:
+        for line in would_verify(block, None, action):
+            on_step(line)
+        return
+    results = run_verify_block(
+        block,
+        deployment=deployment.meta.name,
+        step=None,
+        tokens=tokens,
+        root=root,
+        redact=redact,
+        on_step=on_step,
+        line_callback=(lambda stream, text: on_line("verify", stream, text)) if on_line is not None else None,
+        action=action,
+        environment=environment,
+    )
+    log.record_deployment_checks(check_records(results))
+    diagnostics.extend(verify_diagnostics(block, results, step=None, action=action))
+
+
+def verify_environment(spec: DeploymentSpecModel) -> dict[str, str]:
+    """The variables every command check gets (docs/design/post-deploy-verification.md, D5): the contexts the
+    deployment's steps deploy to, so `helm test`, `helm`, `docker` and `kubectl` in a check reach the same cluster or
+    engine. `HELM_KUBECONTEXT` and `DOCKER_CONTEXT` are read by those tools; `kubectl` reads no variable for its
+    context: a check writes `${deployment:kube_context}` in `run`, or a script reads `STRATA_KUBE_CONTEXT`.
+
+    Each tool's variables are the ones its integration sets for the steps (`target_context_env()`), so a check
+    cannot reach another cluster than its step did. Helm and Docker are asked even when no step uses them:
+    a `helm test` check may test a chart a GitOps controller installed."""
+    environment: dict[str, str] = {}
+    for tool in _CHECK_TOOLS:
+        field = tool.TARGET_CONTEXT_FIELD
+        context = cast(str | None, getattr(spec, field)) if field else None
+        if field and context:
+            environment.update(tool.target_context_env(context))
+            environment[f"STRATA_{field.upper()}"] = context
+    return environment
+
+
+#: The tools whose target context every command check gets (`verify_environment()`).
+_CHECK_TOOLS: tuple[type[InfraIntegration], ...] = (HelmIntegration, ComposeIntegration)
+
+
+def _verify_tokens(tokens: Mapping[str, str], step_outputs: Mapping[str, Mapping[str, str]]) -> dict[str, str]:
+    """What a verify check's tokens resolve from: the step's own tokens, plus the outputs of every step applied so
+    far in this run, its own included, so a check can address what the step just created (`${output:STEP.KEY}`)."""
+    return {
+        **tokens,
+        **{f"{name}.{key}": value for name, outputs in step_outputs.items() for key, value in outputs.items()},
+    }
+
+
+def _report_would_verify(
+    stage: DeploymentStageModel | None,
+    step: ProvisioningStepModel,
+    on_step: Callable[[str], None],
+    action: Action = "apply",
+) -> None:
+    """`--dry-run`/`--smoke-test`: name the checks a real run would run after this step, run none."""
+    block = stage.verify if stage is not None else None
+    if block is not None and block.enabled:
+        for line in would_verify(block, step.name, action):
+            on_step(line)
 
 
 def _targeted_namespaces(
@@ -971,6 +1120,7 @@ def deploy_run(
     destroy: bool = False,
     on_tool: Callable[[str, IntegrationReadiness], None] | None = None,
     stage_log: StageLog | None = None,
+    verify: bool = True,
 ) -> Diagnostics:
     """Execute `deployment_name`'s workspace provisioners against `build_path`
     (already rendered by a prior `build run` — this never re-renders it).
@@ -1087,6 +1237,10 @@ def deploy_run(
         stage_log: Filled with what each selected step did (when it started, its phases, whether it got there), for
             the audit manifest's `stages` (docs/design/audit-trail.md, "Stages"). Read it with `stages()` after this
             returns.
+        verify: Run each stage's `verify` checks right after its step is applied (docs/design/
+            post-deploy-verification.md, D3); a check that ends in an error stops the run like a failed step. `False` is
+            `--no-verify`. Under `destroy` the `when: [destroy]` checks run after each step's destroy, reading
+            `${output:}` from the output store (D6); `dry_run`/`smoke_test` only name the checks.
 
     Returns:
         Diagnostics accumulated while resolving values, preflight-
@@ -1490,6 +1644,62 @@ def deploy_run(
     # `${artifact:NAME.FIELD}` (docs/archive/artifact-gap-analysis.md, design 1): once per run, so each pin that wins
     # is logged once, not once per step.
     artifact_tokens = artifact_token_values(index, deployment, log=True)
+    check_tokens = {
+        **resolved.values,
+        **deployment_token_values(
+            deployment.meta.name,
+            deployment.spec.tenant,
+            kube_context=deployment.spec.kube_context,
+            docker_context=deployment.spec.docker_context,
+        ),
+        **artifact_tokens,
+    }
+    check_environment = verify_environment(deployment.spec)
+
+    # A destroy's checks (docs/design/post-deploy-verification.md, D6) run when what they address is gone, so the
+    # outputs they read (the destroyed app's host name) come from the output store, read before anything is touched.
+    action: Action = "destroy" if destroy else "apply"
+    destroy_check_outputs: dict[str, dict[str, str]] = {}
+    if destroy and verify and not (dry_run or smoke_test):
+        destroy_blocks = [
+            stage.verify
+            for step, _, _ in resolved_steps
+            if (stage := stage_by_step.get(step.name)) is not None and stage.verify is not None
+        ]
+        if deployment.spec.verify is not None and len(steps) == len(all_steps):
+            destroy_blocks.append(deployment.spec.verify)
+        # The preflight's records are not read again, and a record a check cannot use does not stop the destroy:
+        # the check answers unknown, and its `on_unknown` decides.
+        destroy_check_outputs = _read_check_outputs(
+            output_store,
+            workspace.meta.name,
+            output_steps(destroy_blocks, "destroy"),
+            diagnostics=diagnostics,
+            already_read=recorded_outputs,
+            unusable_blocks=False,
+        )
+
+    def _verify_destroyed(step: ProvisioningStepModel, stage: DeploymentStageModel | None) -> bool:
+        """The stage's `when: [destroy]` checks, after its step was destroyed; named only under `--dry-run`."""
+        if not verify:
+            return True
+        if dry_run:
+            _report_would_verify(stage, step, _step, "destroy")
+            return True
+        return _verify_step(
+            stage,
+            step,
+            deployment=deployment.meta.name,
+            tokens=_verify_tokens(check_tokens, destroy_check_outputs),
+            root=context.root,
+            redact=_redact,
+            on_step=_step,
+            on_line=on_line,
+            log=log,
+            diagnostics=diagnostics,
+            environment=check_environment,
+            action="destroy",
+        )
 
     for step, provisioner, integration in resolved_steps:
         # Matches `build_run()`'s own `source_path` resolution exactly
@@ -1534,6 +1744,8 @@ def deploy_run(
         # condition.
         if smoke_test:
             _step(f"would {'destroy' if destroy else 'deploy'} step '{step.name}' via {integration_type}")
+            if verify:
+                _report_would_verify(deployment_stage, step, _step, action)
             continue
 
         env = tf_var_env(resolved, integration.ENV_VAR_PREFIX)
@@ -1572,7 +1784,12 @@ def deploy_run(
         tokens = {
             **resolved.values,
             **visible_outputs,
-            **deployment_token_values(deployment.meta.name, deployment.spec.tenant),
+            **deployment_token_values(
+                deployment.meta.name,
+                deployment.spec.tenant,
+                kube_context=deployment.spec.kube_context,
+                docker_context=deployment.spec.docker_context,
+            ),
             **artifact_tokens,
         }
 
@@ -1626,6 +1843,8 @@ def deploy_run(
                 if not diagnostics.ok:
                     return diagnostics
                 destroyed.append(step.name)
+                if not _verify_destroyed(step, deployment_stage):
+                    return diagnostics
                 continue
             if not use_saved_plan:
                 # The container counterpart to Terraform's `validate()` (ADR-0043);
@@ -1707,6 +1926,22 @@ def deploy_run(
                         code="report_store_record",
                     )
             _step(f"deployed step '{step.name}' via {integration_type}")
+            if verify and dry_run:
+                _report_would_verify(deployment_stage, step, _step)
+            elif verify and not _verify_step(
+                deployment_stage,
+                step,
+                deployment=deployment.meta.name,
+                tokens=_verify_tokens(tokens, step_outputs),
+                root=context.root,
+                redact=_redact,
+                on_step=_step,
+                on_line=on_line,
+                log=log,
+                diagnostics=diagnostics,
+                environment=check_environment,
+            ):
+                return diagnostics
             continue
 
         # This step's own view: dns/networks/firewalls filtered to
@@ -1918,6 +2153,8 @@ def deploy_run(
             ):
                 return diagnostics
             destroyed.append(step.name)
+            if not _verify_destroyed(step, deployment_stage):
+                return diagnostics
             continue
 
         if not use_saved_plan:
@@ -1977,6 +2214,8 @@ def deploy_run(
                 # A tool that does not stream its preview (a script's `would run: ...`) would otherwise show nothing.
                 _show_unstreamed(plan_result, bool(plan_seen), _step, _redact)
                 _step(f"planned step '{step.name}' via {integration_type} (dry-run, no apply)")
+                if verify:
+                    _report_would_verify(deployment_stage, step, _step)
                 continue
 
         log.phase("apply")
@@ -2061,7 +2300,40 @@ def deploy_run(
             )
 
         _step(f"deployed step '{step.name}' via {integration_type}")
+        if verify and not _verify_step(
+            deployment_stage,
+            step,
+            deployment=deployment.meta.name,
+            tokens=_verify_tokens(tokens, step_outputs),
+            root=context.root,
+            redact=_redact,
+            on_step=_step,
+            on_line=on_line,
+            log=log,
+            diagnostics=diagnostics,
+            environment=check_environment,
+        ):
+            return diagnostics
     log.finish()
+
+    # The deployment's own checks, once every step was applied or destroyed (docs/design/post-deploy-verification.md,
+    # D2, D3, D6). After an apply every step ran in this run, so their outputs are all in `step_outputs`; after a
+    # destroy they were read from the output store before the first step was destroyed.
+    if verify and stop_after is None:
+        _verify_deployment(
+            deployment,
+            partial=len(steps) < len(all_steps),
+            preview=dry_run or smoke_test,
+            tokens=_verify_tokens(check_tokens, destroy_check_outputs if destroy else step_outputs),
+            root=context.root,
+            redact=_redact,
+            on_step=_step,
+            on_line=on_line,
+            log=log,
+            diagnostics=diagnostics,
+            environment=check_environment,
+            action=action,
+        )
 
     # Only after the whole run succeeded: a retry re-runs the steps already destroyed, and those still need
     # their upstream steps' recorded outputs (docs/design/deploy-destroy.md, D8).
@@ -2085,3 +2357,208 @@ def deploy_run(
                 )
 
     return diagnostics
+
+
+def deploy_verify(
+    context: SolutionContext,
+    deployment_name: str,
+    *,
+    stages: Sequence[str] = (),
+    scopes: Sequence[str] = (),
+    on_step: Callable[[str], None] | None = None,
+    on_line: Callable[[str, str, str], None] | None = None,
+    pin: VersionPins = None,
+    output_max_age: int | None = None,
+) -> tuple[Diagnostics, VerifyReport]:
+    """Run DEPLOYMENT's verify checks against what is deployed now, changing nothing (`deploy verify`,
+    docs/design/post-deploy-verification.md D3, ADR-0066).
+
+    Every selected step's stage block runs, in `depends_on` order, then `spec.verify`, which needs the whole
+    deployment and so is skipped (an info line) when `--stage`/`--scope` leaves a step out. Every block runs even
+    after one failed: a stand-alone check reports everything it finds. The `initial_delay`s are not waited (nothing
+    was just started), the retries are (`failure_threshold`, `period`), and `STRATA_ACTION` is `verify`.
+
+    A check's tokens resolve as in a deploy, except that `${output:STEP.KEY}` comes from the workspace's
+    `output_store` alone: no step ran here. A step with no record leaves its tokens unresolved, so a check that
+    reads them answers unknown; a record that is stale or cannot be read is an error, as in `deploy run`.
+
+    Args:
+        context: An already-`require_valid()`-ed solution.
+        deployment_name: `meta.name` of the deployment to verify.
+        stages: Restrict to the steps with one of these names.
+        scopes: Restrict to steps with one of these `scope` labels.
+        on_step: Called with a one-line progress message per check and answer.
+        on_line: Called as `("verify", stream, text)` for every line a check prints (`--follow`).
+        pin: `--pin`: the `kind: version` documents `${artifact:}` tokens resolve against.
+        output_max_age: `--output-max-age`: trust window in seconds for the recorded outputs.
+
+    Returns:
+        The findings (`verify_check_failed` and the rest, as in a deploy) and the checks' answers.
+
+    Raises:
+        UsageError: `deployment_name` does not exist, or its workspace does not resolve.
+    """
+
+    def _step(message: str) -> None:
+        if on_step is not None:
+            on_step(message)
+
+    deployment, workspace = resolve_deployment_workspace(context, deployment_name, version_pin=pin)
+    diagnostics = Diagnostics()
+    report = VerifyReport()
+
+    all_steps = workspace.spec.execution or []
+    selected = select_steps(ordered_by_depends_on(all_steps), stages=stages, scopes=scopes).steps
+    if not selected and (stages or scopes):
+        diagnostics.error(
+            "No step matches the given --stage/--scope filter, so there is nothing to verify.", code="verify_no_steps"
+        )
+        return diagnostics, report
+    stage_by_step = {stage.step: stage for stage in (deployment.spec.stages or [])}
+    blocks: list[tuple[ProvisioningStepModel, DeploymentStageModel, DeploymentVerifyModel]] = []
+    for step in selected:
+        stage = stage_by_step.get(step.name)
+        if stage is not None and stage.verify is not None and has_checks(stage.verify, "verify"):
+            blocks.append((step, stage, stage.verify))
+    deployment_block = deployment.spec.verify
+    if deployment_block is not None and not has_checks(deployment_block, "verify"):
+        deployment_block = None
+    if deployment_block is not None and len(selected) < len(all_steps):
+        diagnostics.info(
+            "The deployment's own verify checks (spec.verify) did not run: --stage/--scope selected only some steps.",
+            code="verify_deployment_skipped",
+        )
+        deployment_block = None
+    if not blocks and deployment_block is None:
+        diagnostics.warning(
+            f"Deployment '{deployment_name}' has no enabled verify checks for the selected steps, so nothing was "
+            "verified.",
+            code="verify_nothing_declared",
+            hint="Add a `verify` block to a stage, or `spec.verify` to the deployment (docs/how-to/verify-a-deploy.md).",
+        )
+        return diagnostics, report
+
+    environments = reachable_environments(context, deployment)
+    variables, secrets, features = merge_environment_models(environments)
+    resolved = resolve_values(context, deployment_name, sorted({**variables, **secrets, **features}), version_pin=pin)
+    diagnostics.extend(resolved.diagnostics)
+    if not resolved.diagnostics.ok:
+        return diagnostics, report
+    secret_values = {v for k, v in resolved.values.items() if k in secrets and len(v) >= _MIN_REDACT_LENGTH}
+
+    def _redact(text: str) -> str:
+        for value in secret_values:
+            text = text.replace(value, "***")
+        return text
+
+    every_block = [block for _, _, block in blocks] + ([deployment_block] if deployment_block is not None else [])
+    backend = resolve_output_store_integration(context.controller.index, workspace)
+    max_age = output_max_age if output_max_age is not None else workspace.spec.output_store_max_age
+    store = (
+        DeploymentOutputStore(
+            backend, deployment_name, max_age=timedelta(seconds=max_age) if max_age is not None else None
+        )
+        if backend is not None
+        else None
+    )
+    outputs = _read_check_outputs(
+        store, workspace.meta.name, output_steps(every_block, "verify"), diagnostics=diagnostics
+    )
+    if not diagnostics.ok:
+        return diagnostics, report
+    tokens = _verify_tokens(
+        {
+            **resolved.values,
+            **deployment_token_values(
+                deployment.meta.name,
+                deployment.spec.tenant,
+                kube_context=deployment.spec.kube_context,
+                docker_context=deployment.spec.docker_context,
+            ),
+            **artifact_token_values(context.controller.index, deployment),
+        },
+        outputs,
+    )
+
+    check_environment = verify_environment(deployment.spec)
+    line_callback = (lambda stream, text: on_line("verify", stream, text)) if on_line is not None else None
+    for step, stage, block in blocks:
+        results = run_verify_block(
+            block,
+            deployment=deployment.meta.name,
+            step=step.name,
+            tokens=tokens,
+            root=context.root,
+            redact=_redact,
+            phase_timeout=_timeout_kwargs(step, stage, "verify").get("timeout"),
+            on_step=_step,
+            line_callback=line_callback,
+            action="verify",
+            wait=False,
+            environment=check_environment,
+        )
+        report.stages[step.name] = check_records(results)
+        diagnostics.extend(verify_diagnostics(block, results, step=step.name, action="verify"))
+    if deployment_block is not None:
+        results = run_verify_block(
+            deployment_block,
+            deployment=deployment.meta.name,
+            step=None,
+            tokens=tokens,
+            root=context.root,
+            redact=_redact,
+            on_step=_step,
+            line_callback=line_callback,
+            action="verify",
+            wait=False,
+            environment=check_environment,
+        )
+        report.checks.extend(check_records(results))
+        diagnostics.extend(verify_diagnostics(deployment_block, results, step=None, action="verify"))
+    return diagnostics, report
+
+
+def _read_check_outputs(
+    store: DeploymentOutputStore | None,
+    workspace_name: str,
+    steps: set[str],
+    *,
+    diagnostics: Diagnostics,
+    already_read: Mapping[str, Mapping[str, str]] | None = None,
+    unusable_blocks: bool = True,
+) -> dict[str, dict[str, str]]:
+    """The outputs verify checks read (`steps`) when no step ran before them (`deploy verify`, or a destroy), from
+    the workspace's `output_store`. A step with no record is left out; a stale or unreadable one is an error, or
+    with `unusable_blocks=False` (a destroy, which a check must not stop before it starts) a warning, and the checks
+    that read it answer unknown. No store at all is a warning too.
+
+    `already_read` holds records the run read before (the destroy preflight's), which are not read again."""
+    already_read = already_read or {}
+    known = {step: dict(already_read[step]) for step in steps if step in already_read}
+    steps = steps - set(known)
+    if not steps:
+        return known
+    if store is None:
+        diagnostics.warning(
+            f"Verify checks read the outputs of {sorted(steps)}, but workspace '{workspace_name}' has no "
+            "output_store to read them from, so those checks cannot answer.",
+            code="verify_outputs_unavailable",
+            hint="Configure the workspace's `output_store`, or run the apply checks as part of `deploy run`, which "
+            "has the outputs it just collected.",
+        )
+        return known
+    outputs: dict[str, dict[str, str]] = dict(known)
+    report = diagnostics.error if unusable_blocks else diagnostics.warning
+    for step in sorted(steps):
+        try:
+            outputs[step] = dict(store.read(step))
+        except OutputRecordNotFoundError:
+            continue
+        except (OutputRecordStaleError, IntegrationError, SystemError) as exc:
+            consequence = "" if unusable_blocks else "; the checks that read them cannot answer"
+            report(
+                f"Step '{step}': its recorded outputs, which a verify check reads, are unusable - {exc}{consequence}",
+                location=step,
+                code="verify_outputs_unusable",
+            )
+    return outputs

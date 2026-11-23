@@ -1,7 +1,7 @@
 # Deployment tokens - Design
 
 - Status: current
-- Last updated: 2026-11-03
+- Last updated: 2026-11-23
 
 ## Overview
 
@@ -31,9 +31,13 @@ reference, with examples for Azure, S3, GCS and local state, is "Terraform backe
 | ---------------------- | ------------------------------------------------------------- |
 | `${deployment:name}`   | the deployment's `meta.name`                                  |
 | `${deployment:tenant}` | the deployment's `spec.tenant`, from the deployment or a base |
+| `${deployment:kube_context}` | the deployment's `spec.kube_context`, the cluster its Helm steps deploy to |
+| `${deployment:docker_context}` | the deployment's `spec.docker_context`, the engine its Compose steps deploy to |
 
-Only these two keys exist (`DEPLOYMENT_TOKEN_KEYS` in `utils/value_tokens.py`). `${deployment:tenant}` on a
-deployment with no tenant is an error, never an empty string. `$${deployment:name}` is a literal, like any escaped
+Only these four keys exist (`DEPLOYMENT_TOKEN_KEYS` in `utils/value_tokens.py`). A key the deployment does not set
+(`tenant`, `kube_context` or `docker_context`) is an error, never an empty string. The two contexts were added for
+post-deploy verification: a check's `run` is never passed through a shell, so `[kubectl, --context,
+"${deployment:kube_context}", ...]` is how it reaches the same cluster as the steps. `$${deployment:name}` is a literal, like any escaped
 token.
 
 ### Where it works
@@ -50,8 +54,8 @@ before a deployment is chosen.
 ### The flat-map key
 
 Resolution reads a token's key from one flat mapping and ignores its kind, so the entries are stored as
-`deployment:name` and `deployment:tenant`. `deployment_token_values(name, tenant)` builds them, leaves the tenant
-out when there is none, and is the only place that knows the key shape; `_lookup_key()` applies it for both
+`deployment:<key>`. `deployment_token_values(name, tenant, kube_context=, docker_context=)` builds them, leaves
+out a key the deployment does not set, and is the only place that knows the key shape; `_lookup_key()` applies it for both
 resolvers that look keys up (`resolve_value_tokens()` and `resolve_value_tokens_renaming_secrets()`). The token
 regex never allows a colon in a key, so a variable, secret, feature or step output (`step.key`) can never equal one
 of these entries.
@@ -61,10 +65,10 @@ of these entries.
 `strata validate` judges the tokens per deployment, in every document the deployment reaches:
 
 - `unresolved_value_tokens()` skips the kind, as it skips `value`: it is not an environment key.
-- `unresolved_deployment_tokens(model, deployment_name, tenant)` in `services/environment_service.py` judges it
-  against the same entries `deploy run` uses, so the two cannot disagree. A key other than `name` or `tenant` is
-  `unknown_deployment_token`; `${deployment:tenant}` with no tenant is `unavailable_deployment_token`, naming the
-  deployment.
+- `unresolved_deployment_tokens(model, deployment_name, tenant, kube_context=, docker_context=)` in `services/environment_service.py` judges it
+  against the same entries `deploy run` uses, so the two cannot disagree. A key other than the four is
+  `unknown_deployment_token`; one the deployment does not set (no tenant, no context) is
+  `unavailable_deployment_token`, naming the deployment.
 - `_check_deployment_value_tokens()` in `semantic_checks.py` runs it with the resolved deployment, so a tenant set
   by an `extends` base counts. It runs whether or not the deployment resolves an environment, and skips a
   `partial: true` base, which is judged only once a deployment extends it.

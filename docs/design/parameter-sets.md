@@ -141,7 +141,7 @@ leaves naming the same sets share their bases' work.
 | ----------- | --------------------------------------- | -------------------------------------------------------------------------- |
 | deployment  | nested blocks                           | deep merge per leaf key, child wins                                        |
 | deployment  | `stages`, `providers`, `assets`         | by `step`, `slot`, `slot`; a child item deep-merges over the base's        |
-| deployment  | a stage's `health_checks`               | by `name` inside a merged stage; a child check deep-merges over the base's |
+| deployment  | `verify.checks` (spec and stage)        | by `name`; a child check deep-merges over the base's                       |
 | deployment  | `environments`, `configurations`        | base's list, then the child's new entries                                  |
 | environment | `properties`, `custom`                  | deep merge per leaf key, child wins                                        |
 | environment | `variables`, `secrets`, `features`      | by `key`: a child entry **replaces the whole entry**; new keys appended     |

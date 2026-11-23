@@ -477,8 +477,18 @@ def test_deployment_token_values_leaves_the_tenant_out_when_there_is_none():
 
 
 def test_deployment_token_keys_are_exactly_the_keys_the_values_carry():
-    built = {key.removeprefix("deployment:") for key in deployment_token_values("prd-contoso", "contoso")}
+    values = deployment_token_values("prd-contoso", "contoso", kube_context="aks-prd", docker_context="swarm-prd")
+    built = {key.removeprefix("deployment:") for key in values}
     assert built == set(DEPLOYMENT_TOKEN_KEYS)
+
+
+def test_deployment_token_values_carry_the_target_contexts_only_when_set():
+    """docs/design/deployment-tokens.md: `${deployment:kube_context}` without one fails, never an empty string."""
+    values = deployment_token_values("prd", None, kube_context="aks-prd")
+    assert values == {"deployment:name": "prd", "deployment:kube_context": "aks-prd"}
+    assert resolve_value_tokens("--context=${deployment:kube_context}", values) == "--context=aks-prd"
+    with pytest.raises(ValueError, match="needs a docker_context"):
+        resolve_value_tokens("${deployment:docker_context}", values)
 
 
 def test_extract_value_tokens_returns_the_deployment_kind():
@@ -569,7 +579,10 @@ def test_a_deployment_entry_cannot_collide_with_a_key_of_any_other_kind():
 
 
 def test_resolve_value_tokens_names_an_unknown_deployment_key_and_the_valid_ones():
-    with pytest.raises(ValueError, match=r"is not a deployment token. Available: \['name', 'tenant'\]"):
+    with pytest.raises(
+        ValueError,
+        match=r"is not a deployment token. Available: \['docker_context', 'kube_context', 'name', 'tenant'\]",
+    ):
         resolve_value_tokens("${deployment:workspace}", deployment_token_values("prd-contoso", "contoso"))
 
 

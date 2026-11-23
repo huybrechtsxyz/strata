@@ -300,9 +300,11 @@ def test_a_default_is_never_credited_to_a_document(tmp_path):
     ]
     fields = _by_path(_render(tmp_path, PlatformKind.DEPLOYMENT, "bootstrap-acme-001", documents))
     assert fields["spec.stages[0].step"].document == "bootstrap-acme-001"
-    assert fields["spec.stages[0].enabled"].document is None  # a schema default, written by nobody
+    # A schema default, written by nobody, is neither credited nor listed: the chain merges each document as
+    # written, so a child's dumped default no longer reaches the merged document as if someone had set it.
+    assert "spec.stages[0].enabled" not in fields
     assert fields["spec.locking.strategy"].written == "${param:spoke.lock}"
-    assert fields["spec.locking.enabled"].document is None
+    assert "spec.locking.enabled" not in fields
 
 
 def test_a_date_value_renders_as_json_text(tmp_path):

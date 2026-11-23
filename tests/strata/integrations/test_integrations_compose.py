@@ -88,6 +88,7 @@ def test_deploy_argv_with_registry_auth(monkeypatch):
         "docker",
         "stack",
         "deploy",
+        "--detach=false",
         "--with-registry-auth",
         "-c",
         str(Path("/work/ns/docker-compose.yml")),
@@ -98,7 +99,16 @@ def test_deploy_argv_with_registry_auth(monkeypatch):
 def test_deploy_argv_without_registry_auth(monkeypatch):
     captured = _capture(monkeypatch)
     ComposeIntegration().deploy(Path("/work/ns/docker-compose.yml"), namespace="ns", with_registry_auth=False)
-    assert captured["args"] == ["docker", "stack", "deploy", "-c", str(Path("/work/ns/docker-compose.yml")), "ns"]
+    # --detach=false: a successful deploy means the services converged, not just that the stack was submitted.
+    assert captured["args"] == [
+        "docker",
+        "stack",
+        "deploy",
+        "--detach=false",
+        "-c",
+        str(Path("/work/ns/docker-compose.yml")),
+        "ns",
+    ]
 
 
 def test_destroy_argv(monkeypatch):
@@ -453,6 +463,7 @@ def test_deploy_namespace_writes_the_deploy_file_and_deploys_the_stack(monkeypat
         "docker",
         "stack",
         "deploy",
+        "--detach=false",
         "--with-registry-auth",
         "-c",
         str(namespace_dir / "docker-compose.deploy.yml"),

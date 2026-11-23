@@ -5,7 +5,7 @@ docs/design/provisioner-source-dependencies.md."""
 
 import pytest
 
-from strata.utils.dependency_order import topological_order
+from strata.utils.dependency_order import topological_order, upstream_of
 
 
 def test_topological_order_respects_dependency_order():
@@ -65,3 +65,14 @@ def test_topological_order_empty_input():
 def test_topological_order_no_dependencies_at_all():
     order = topological_order(["a", "b", "c"], {})
     assert order == ["a", "b", "c"]
+
+
+def test_upstream_of_walks_depends_on_through_others_without_the_name_itself():
+    depends_on = {"web": ["api"], "api": ["db", "net"], "db": ["net"], "net": []}
+    assert upstream_of("web", depends_on) == {"api", "db", "net"}
+    assert upstream_of("net", depends_on) == set()
+    assert upstream_of("unknown", depends_on) == set()
+
+
+def test_upstream_of_ends_where_a_cycle_closes():
+    assert upstream_of("a", {"a": ["b"], "b": ["a"]}) == {"a", "b"}

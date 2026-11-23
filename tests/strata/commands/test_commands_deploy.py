@@ -1056,3 +1056,68 @@ def test_deploy_destroy_help_stresses_irreversibility_and_is_listed(runner):
     assert result.exit_code == EXIT_SUCCESS, result.output
     assert "IRREVERSIBLE" in result.output
     assert "--force" in result.output and "--dry-run" in result.output and "--smoke-test" in result.output
+
+
+@pytest.mark.parametrize(
+    ("command", "flags", "verify"),
+    [
+        ("run", [], True),
+        ("run", ["--no-verify"], False),
+        ("apply", ["--no-verify"], False),
+        ("destroy", ["--smoke-test"], True),
+        ("destroy", ["--smoke-test", "--no-verify"], False),
+    ],
+)
+def test_no_verify_reaches_deploy_run(runner, solution, monkeypatch, command, flags, verify):
+    """docs/design/post-deploy-verification.md, D3: `--no-verify` skips the stages' checks for one run."""
+    import strata.commands.deploy_command as deploy_command_module
+    from strata.utils.diagnostics import Diagnostics
+
+    seen: dict[str, object] = {}
+
+    def _fake_deploy_run(*args, **kwargs):
+        seen.update(kwargs)
+        return Diagnostics()
+
+    monkeypatch.setattr(deploy_command_module, "deploy_run", _fake_deploy_run)
+    result = runner.invoke(cli, ["deploy", command, "app", "--path", str(solution), *flags])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert seen["verify"] is verify
+
+
+@pytest.mark.parametrize(("answer", "exit_code"), [("pass", EXIT_SUCCESS), ("fail", EXIT_VALIDATION)])
+def test_deploy_verify_exits_by_the_checks_and_reports_them_as_json(runner, solution, monkeypatch, answer, exit_code):
+    """docs/design/post-deploy-verification.md, D3: 0 when nothing failed, 3 when a check ended in an error."""
+    import strata.commands.deploy_command as deploy_command_module
+    from strata.controllers.verification import VerifyReport
+    from strata.models.audit_manifest_model import ManifestCheckModel
+    from strata.utils.diagnostics import Diagnostics
+
+    seen: dict[str, object] = {}
+
+    def _fake_deploy_verify(context, deployment, **kwargs):
+        seen.update(kwargs, deployment=deployment)
+        diagnostics = Diagnostics()
+        if answer == "fail":
+            diagnostics.error("Deployment: verify check 'e2e' failed", code="verify_check_failed")
+        return diagnostics, VerifyReport(checks=[ManifestCheckModel(name="e2e", answer=answer, attempts=1)])
+
+    monkeypatch.setattr(deploy_command_module, "deploy_verify", _fake_deploy_verify)
+    result = runner.invoke(
+        cli, ["deploy", "verify", "app", "--path", str(solution), "--stage", "apply_infra", "--output", "json"]
+    )
+
+    assert result.exit_code == exit_code, result.output
+    assert (seen["deployment"], seen["stages"]) == ("app", ("apply_infra",))
+    data = json.loads(result.stdout)["data"]
+    assert data == {
+        "verified": answer == "pass",
+        "stages": [],
+        "checks": [{"name": "e2e", "answer": answer, "attempts": 1}],
+    }
+
+
+def test_deploy_verify_help_names_its_exit_codes(runner):
+    result = runner.invoke(cli, ["deploy", "verify", "--help"])
+    assert result.exit_code == EXIT_SUCCESS, result.output
+    assert "changing nothing" in result.output and "Exit codes" in result.output

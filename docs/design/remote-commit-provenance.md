@@ -178,9 +178,12 @@ in the pipeline's checkout:
   tree stays as it was. A deleted file is committed as a removal.
 - **Identity.** The commit author is the deploying actor, passed per command (`git -c user.name=... -c
   user.email=...`). The checkout's config belongs to the pipeline and is never written. Strata's own clones keep
-  writing a local identity, as before.
+  writing a local identity, as before. The author name is the actor as resolved; the email is built from it by
+  `git_push.commit_email()`, which turns each run of characters a local part should not hold into one `.`. Azure
+  Pipelines' actor is a display name, so "First Last" commits as `First.Last@strata-audit.local`, and an actor that
+  is already an email (`jane@example.com`) as `jane.example.com@strata-audit.local`.
 - **Pushing.** Before each push strata runs `git fetch origin <branch>`. Every commit `HEAD` has that the branch
-  lacks must be strata's own (author email `@strata-audit.local` or `@strata-gitops.local`, no merge); otherwise
+  lacks must be strata's own (author email domain `strata-audit.local` or `strata-gitops.local`, no merge); otherwise
   nothing is pushed and the message says to check out `<branch>`. Without that check, a pipeline that checked out a
   feature branch or a pull request's merge would put that code on `<branch>`. Strata's own include a commit an
   earlier run could not push, which goes now, also when this run had nothing new to commit. When the branch moved,

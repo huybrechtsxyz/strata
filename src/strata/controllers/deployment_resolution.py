@@ -9,9 +9,12 @@ module is that caller, generalised to chains of any length.
 **Why no new raw-dict plumbing is needed.** A `partial: true` base already
 validates standalone (that is exactly what the flag is for), so it already
 sits in the index as an ordinary, already-validated `DeploymentModel`.
-`model.spec.model_dump(exclude_none=True)` on that gives back precisely the
-dict shape `merge_deployment_specs` expects — the loader does not need to be
-touched.
+`model.spec.model_dump(exclude_none=True, exclude_unset=True)` on that gives
+back precisely the dict shape `merge_deployment_specs` expects — the loader
+does not need to be touched. `exclude_unset` keeps it to what the document
+wrote: a default dumped with a child (`locking.enabled: false`, a stage's
+`enabled: true`) would overwrite what its base set. Validating the merged
+dict fills the defaults in again.
 
 **Why completeness is checked against the document's *own* declared
 `partial`, not the merged result's.** `merge_deployment_specs` strips
@@ -391,7 +394,7 @@ def _merged_spec(
     document = cast(AnyDeploymentModel, entry.model)
     origins: dict[str, ParamOrigin] = {}
     own, own_problems = substitute_params(
-        document.spec.model_dump(exclude_none=True), params, param_sets, "spec", origins
+        document.spec.model_dump(exclude_none=True, exclude_unset=True), params, param_sets, "spec", origins
     )
     own_findings: list[ParamProblem] = []
     if isinstance(document, DeploymentTemplateModel) and not own_problems:
@@ -492,7 +495,7 @@ def _validate_substituted(
                 per_leaf=origin is not None,
             )
         )
-    return model.model_dump(exclude_none=True), [], findings
+    return model.model_dump(exclude_none=True, exclude_unset=True), [], findings
 
 
 def _unused_values(index: DocumentIndex, chains: Mapping[str, tuple[str, ...] | None]) -> Diagnostics:

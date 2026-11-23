@@ -98,7 +98,8 @@ class HelmIntegration(InfraIntegration):
 
     TARGET_CONTEXT_FIELD = "kube_context"
 
-    def target_context_env(self, context: str) -> dict[str, str]:
+    @classmethod
+    def target_context_env(cls, context: str) -> dict[str, str]:
         """Helm reads `HELM_KUBECONTEXT` as the default for `--kube-context`, for every subcommand."""
         return {KUBE_CONTEXT_ENV: context}
 

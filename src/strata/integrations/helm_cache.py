@@ -22,6 +22,7 @@ import yaml
 
 from strata.integrations.base import Integration
 from strata.integrations.errors import IntegrationError
+from strata.utils.file_release import when_released
 
 #: An exact SemVer 2 version, as Helm writes it in `Chart.yaml` (an optional leading `v`). Anything else is a
 #: constraint only the registry can resolve.
@@ -177,10 +178,12 @@ def pull_chart(
                 )
             return existing
         try:
+            # On Windows a virus scanner reading the archive just pulled holds the staging directory for a moment.
             if entry.exists():
-                shutil.rmtree(entry)  # an incomplete entry from before entries were renamed into place
+                # an incomplete entry from before entries were renamed into place
+                when_released(lambda: shutil.rmtree(entry))
             entry.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(staging, entry)
+            when_released(lambda: os.replace(staging, entry))
         except OSError as exc:
             raise ChartPullError(f"{wanted} at {pulled.version} could not be stored in {entry} — {exc}") from exc
     stored = cached_pin(cache_root, source, chart, pulled.version)

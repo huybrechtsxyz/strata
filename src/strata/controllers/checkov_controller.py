@@ -13,7 +13,7 @@ real, evidenced re-interpretation, not a straight port: `build_run()`'s own
 step loop (confirmed by direct read) iterates every `workspace.spec.
 execution` step unconditionally, regardless of `DeploymentModel.spec.
 stages` (a deploy-time runtime-knobs concept — `DeploymentStageModel`
-carries timeouts/health_checks/enabled, never consulted by `build run`).
+carries timeouts/verify/enabled, never consulted by `build run`).
 v1's "staged" (reachable from at least one deployment stage) has no clean
 equivalent at build time in v2. Re-scoped instead to a distinction that
 *is* build-time-native:

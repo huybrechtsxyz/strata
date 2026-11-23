@@ -27,8 +27,10 @@ spec:
   # the base's timeouts.apply survives.
   stages:
     - step: provision-infra
-      health_checks:
-        - name: api
-          type: http
-          url: https://example.com/health
-          expect_status: 200
+      # Run after the step is applied: the deploy fails unless the API answers.
+      verify:
+        checks:
+          - name: api
+            type: http
+            url: https://example.com/health
+            expect_status: 200

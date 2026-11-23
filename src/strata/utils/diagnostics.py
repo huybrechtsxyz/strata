@@ -28,7 +28,7 @@ and in the order they were discovered.
 """
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any
 
@@ -138,15 +138,8 @@ class Diagnostics:
         """
         for item in other.items:
             if source is not None and item.source is None:
-                self.items.append(
-                    Diagnostic(
-                        severity=item.severity,
-                        message=item.message,
-                        source=source,
-                        location=item.location,
-                        code=item.code,
-                    )
-                )
+                # `replace()` keeps every other field, `hint` included: rebuilding the finding by hand once dropped it.
+                self.items.append(replace(item, source=source))
             else:
                 self.items.append(item)
 

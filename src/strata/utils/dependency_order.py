@@ -67,3 +67,17 @@ def topological_order(
         cyclic = sorted(name for name in names_list if name not in ordered)
         raise ValueError(f"Circular dependency in {label}: {' -> '.join(cyclic)}")
     return ordered
+
+
+def upstream_of(name: str, depends_on: Mapping[str, Sequence[str]]) -> set[str]:
+    """Every name `name` depends on, directly or through others, without `name` itself: the steps whose
+    `${output:}` a step (and its verify checks) may read. The one walk `deploy run` and `strata validate` share, so
+    they cannot disagree. A name with no entry has no dependencies; a cycle ends where it closes."""
+    seen: set[str] = set()
+    pending = list(depends_on.get(name, ()))
+    while pending:
+        current = pending.pop()
+        if current not in seen:
+            seen.add(current)
+            pending.extend(depends_on.get(current, ()))
+    return seen

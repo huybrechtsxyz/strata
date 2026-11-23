@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from strata.integrations import helm_cache
 from strata.integrations.helm import HelmIntegration
 from strata.integrations.helm_cache import (
     DIGEST_CHANGED,
@@ -30,6 +31,7 @@ from strata.integrations.helm_cache import (
     pull_chart,
     remove_stale_staging,
 )
+from strata.utils.file_release import RELEASE_WAITS
 from strata.utils.transport import CommandResult
 
 
@@ -124,6 +126,74 @@ def test_no_version_pulls_without_a_version_flag(tmp_path: Path):
     _pull(helm, tmp_path, version=None)
 
     assert "--version" not in helm.calls[0]
+
+
+# ---------------------------------------------------------------------------
+# Storing the entry while another process holds a file in it (a virus scanner, on Windows)
+# ---------------------------------------------------------------------------
+
+
+def _replace_refusing(monkeypatch, times: int | None, errno: int = 13) -> list[float]:
+    """`os.replace` in the cache fails `times` times (`None`: always) with `errno` (13, EACCES, is what Python
+    raises as `PermissionError`); returns the waits slept."""
+    real_replace = os.replace
+    refused = {"count": 0}
+
+    def replace(source, target):
+        if times is None or refused["count"] < times:
+            refused["count"] += 1
+            raise OSError(errno, os.strerror(errno), str(source))
+        real_replace(source, target)
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(helm_cache.os, "replace", replace)
+    monkeypatch.setattr(helm_cache.time, "sleep", sleeps.append)
+    return sleeps
+
+
+def test_a_rename_refused_while_a_file_is_held_open_is_retried(tmp_path: Path, monkeypatch):
+    sleeps = _replace_refusing(monkeypatch, times=2)
+
+    pin = _pull(_FakeHelm(), tmp_path)
+
+    assert pin.archive.is_file()
+    assert sleeps == list(RELEASE_WAITS[:2])
+
+
+def test_a_rename_refused_for_good_fails_the_pull_after_the_waits(tmp_path: Path, monkeypatch):
+    sleeps = _replace_refusing(monkeypatch, times=None)
+
+    with pytest.raises(ChartPullError, match="could not be stored"):
+        _pull(_FakeHelm(), tmp_path)
+
+    assert sleeps == list(RELEASE_WAITS)
+
+
+def test_another_storage_error_is_not_retried(tmp_path: Path, monkeypatch):
+    sleeps = _replace_refusing(monkeypatch, times=None, errno=28)  # ENOSPC: waiting does not free the disk
+
+    with pytest.raises(ChartPullError, match="could not be stored"):
+        _pull(_FakeHelm(), tmp_path)
+
+    assert sleeps == []
+
+
+@pytest.mark.skipif(os.name != "nt", reason="only Windows refuses to rename a directory with a file open in it")
+def test_a_pull_waits_for_a_scanner_to_let_go_of_the_new_archive(tmp_path: Path):
+    """The flaky failure under a full parallel run: a process reading the archive just written (as Defender does)
+    makes renaming the staging directory fail with "Access is denied" until it closes the file."""
+
+    class _ScannedHelm(_FakeHelm):
+        def run(self, *args: str, **kwargs) -> CommandResult:
+            result = super().run(*args, **kwargs)
+            destination = Path(args[args.index("--destination") + 1])
+            handle = open(next(destination.glob("*.tgz")), "rb")  # noqa: SIM115 - closed by the timer
+            threading.Timer(0.3, handle.close).start()
+            return result
+
+    pin = _pull(_ScannedHelm(), tmp_path)
+
+    assert pin.archive.is_file()
 
 
 def test_a_cached_chart_is_found_without_helm(tmp_path: Path):
@@ -238,6 +308,7 @@ def test_an_entry_that_cannot_be_stored_is_a_pull_failure(tmp_path: Path, monkey
         raise PermissionError(13, "Access is denied", str(source))
 
     monkeypatch.setattr(os, "replace", replace)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)  # the waits for a release that never comes
 
     with pytest.raises(ChartPullError) as raised:
         _pull(_FakeHelm(), tmp_path)

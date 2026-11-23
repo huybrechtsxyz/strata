@@ -25,7 +25,12 @@ from strata.controllers.policy_results import write_policy_results
 from strata.controllers.solution_context import open_solution
 from strata.integrations.capabilities import AuditSinkIntegration
 from strata.integrations.errors import IntegrationError
-from strata.models.audit_manifest_model import ManifestPolicyResultModel, ManifestProviderModel, ManifestStageModel
+from strata.models.audit_manifest_model import (
+    ManifestCheckModel,
+    ManifestPolicyResultModel,
+    ManifestProviderModel,
+    ManifestStageModel,
+)
 from strata.models.integration_model import Capability
 from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
@@ -1660,6 +1665,80 @@ def test_the_stages_decide_partial_and_the_metrics_count_them(
     assert [s["status"] for s in manifest.get("stages", [])] == statuses
     assert metrics["dimensions"]["outcome"] == ("success" if expected == "success" else "failed")
     assert (metrics["measures"]["stages_total"], metrics["measures"]["stages_failed"]) == (total, failed)
+
+
+@pytest.mark.parametrize("verified", [True, False, None])
+def test_the_manifest_records_the_deployment_checks_and_whether_it_was_verified(
+    tmp_path: Path, _terraform_stub, verified
+):
+    """docs/design/post-deploy-verification.md, D9: `verified` is left out when no check ran."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    checks = [] if verified is None else [ManifestCheckModel(name="e2e", answer="pass", attempts=2)]
+
+    finalize_and_distribute_deploy_audit(
+        _context(root),
+        "app",
+        build_path,
+        execution_id="11111111-1111-1111-1111-111111111111",
+        started_at=datetime.now(timezone.utc),
+        run_diagnostics=Diagnostics(),
+        checks=checks,
+        verified=verified,
+    )
+
+    manifest = _audit_json(root, "_manifest.json")
+    assert manifest.get("verified") is verified
+    assert manifest.get("checks") == ([{"name": "e2e", "answer": "pass", "attempts": 2}] if checks else None)
+    metrics = _audit_json(root, "_metrics.json")
+    state = {True: "verified", False: "verification_failed", None: "not_verified"}[verified]
+    assert metrics["dimensions"]["verification"] == state
+    assert "verification" in metrics["label_safe"]
+
+
+def test_the_metrics_count_every_check_and_a_run_failed_only_by_a_check_is_a_verification_failure(
+    tmp_path: Path, _terraform_stub
+):
+    """docs/design/post-deploy-verification.md, D9: `checks_total`/`checks_failed` over the stages' and the
+    deployment's checks; a run whose only errors are check answers is `error_category: verification`."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    run_diagnostics = Diagnostics()
+    run_diagnostics.error("Step 'first': verify check 'web' failed after 3 attempt(s).", code="verify_check_failed")
+    stage = ManifestStageModel(
+        name="first",
+        provisioner="tf_main",
+        status="failed",
+        checks=[
+            ManifestCheckModel(name="web", answer="fail", attempts=3),
+            ManifestCheckModel(name="disk", answer="warn", attempts=1),
+        ],
+    )
+
+    finalize_and_distribute_deploy_audit(
+        _context(root),
+        "app",
+        build_path,
+        execution_id="11111111-1111-1111-1111-111111111111",
+        started_at=datetime.now(timezone.utc),
+        run_diagnostics=run_diagnostics,
+        stages=[stage],
+        checks=[ManifestCheckModel(name="e2e", answer="unknown", attempts=1)],
+        verified=False,
+    )
+
+    metrics = _audit_json(root, "_metrics.json")
+    assert (metrics["measures"]["checks_total"], metrics["measures"]["checks_failed"]) == (3, 2)
+    assert metrics["error_category"] == "verification"
+
+
+def test_the_metrics_leave_the_check_counts_out_when_no_check_ran(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    _finalize(root, _run_deploy_and_build(root, tmp_path), run_ok=False)
+
+    metrics = _audit_json(root, "_metrics.json")
+    assert "checks_total" not in metrics["measures"] and "checks_failed" not in metrics["measures"]
+    assert metrics["error_category"] == "unknown"  # a plain step failure is not a verification failure
 
 
 # ---------------------------------------------------------------------------

@@ -70,6 +70,7 @@ from strata.models.audit_manifest_model import (
     DeploymentManifestModel,
     ManifestArtifactsModel,
     ManifestChartModel,
+    ManifestCheckModel,
     ManifestImageModel,
     ManifestPipelineModel,
     ManifestPlatformReferenceModel,
@@ -78,7 +79,12 @@ from strata.models.audit_manifest_model import (
     ManifestSbomReferenceModel,
     ManifestStageModel,
 )
-from strata.models.audit_metrics_model import DeploymentMetricsModel, MetricsDimensionsModel, MetricsMeasuresModel
+from strata.models.audit_metrics_model import (
+    DeploymentMetricsModel,
+    MetricsDimensionsModel,
+    MetricsMeasuresModel,
+    verification_state,
+)
 from strata.models.audit_model import EVENT_DEFAULTS, AuditGitSinkTargetModel, AuditSinkModel
 from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind, PlatformVersion
@@ -124,6 +130,8 @@ def finalize_and_distribute_deploy_audit(
     change_approved_at: str | None = None,
     providers: Sequence[ManifestProviderModel] = (),
     stages: Sequence[ManifestStageModel] = (),
+    checks: Sequence[ManifestCheckModel] = (),
+    verified: bool | None = None,
 ) -> Diagnostics:
     """Finalize the manifest + metrics for a `deploy run` invocation, write
     them locally, then distribute to every configured sink.
@@ -173,6 +181,9 @@ def finalize_and_distribute_deploy_audit(
             (`deploy_run(on_tool=...)`, docs/design/helm-chart-deployment.md); `artifacts.providers` is omitted when empty.
         stages: What each step did (`deploy_run(stage_log=...)`); `stages` is omitted when empty. A failed run with
             a stage that succeeded is `partial`: something changed before it stopped.
+        checks: The answers of the deployment's `spec.verify` checks (`StageLog.deployment_checks()`); omitted
+            when empty (docs/design/post-deploy-verification.md, D9).
+        verified: `StageLog.verified()`: whether every check that ran answered pass or warn, `None` when none ran.
 
     Returns:
         Findings from finalizing/writing/distributing only — never
@@ -248,11 +259,14 @@ def finalize_and_distribute_deploy_audit(
         sbom=_sbom_reference(build_path, diagnostics),
         change_reference=change_reference,
         stages=list(stages) or None,
+        checks=list(checks) or None,
+        verified=verified,
         policy_results=policy_results,
         errors=run_diagnostics.messages(Severity.ERROR) or None,
         warnings=run_diagnostics.messages(Severity.WARNING) or None,
         messages=run_diagnostics.messages(Severity.INFO) or None,
     )
+    all_checks = [*(check for stage in stages for check in stage.checks or []), *checks]
     metrics = DeploymentMetricsModel(
         execution_id=execution_id,
         deployment=deployment_name,
@@ -266,6 +280,7 @@ def finalize_and_distribute_deploy_audit(
             tenant=deployment.spec.tenant,
             actor=actor,
             commit_sha=solution_commit,
+            verification=verification_state(verified),
         ),
         measures=MetricsMeasuresModel(
             duration_seconds=duration_seconds,
@@ -274,6 +289,9 @@ def finalize_and_distribute_deploy_audit(
             # Left out, not zero, when no policy was judged (a destroy, or a build with none configured).
             policy_checks_total=None if policy_results is None else len(policy_results),
             policy_checks_failed=None if policy_results is None else sum(not r.passed for r in policy_results),
+            # Left out, not zero, when no verify check ran; "failed" as `verified` reads it: fail or unknown.
+            checks_total=len(all_checks) or None,
+            checks_failed=sum(check.answer not in ("pass", "warn") for check in all_checks) if all_checks else None,
         ),
         error_category=error_category(run_diagnostics, policy_results),
     )
@@ -338,7 +356,7 @@ def finalize_and_distribute_deploy_audit(
 
 def audit_summary(manifest: DeploymentManifestModel) -> dict[str, str | None]:
     """What the handover document says about a run (its `audit` data): never a value, only who, when, which
-    commit and which audit record."""
+    commit, which audit record, and whether its verify checks said the deployment works."""
     return {
         "deployed_by": manifest.deployed_by,
         "completed_at": manifest.completed_at,
@@ -347,6 +365,7 @@ def audit_summary(manifest: DeploymentManifestModel) -> dict[str, str | None]:
         "version": manifest.version,
         "execution_id": manifest.execution_id,
         "commit_sha": manifest.commit_sha,
+        "verification": verification_state(manifest.verified),
     }
 
 

@@ -53,6 +53,7 @@ from strata.models.common_models import SourceModel
 from strata.models.solution_model import SolutionRemoteModel
 from strata.utils import layout
 from strata.utils.errors import SystemError
+from strata.utils.file_release import when_released
 from strata.utils.path_conventions import fill_pattern, segment_tokens
 from strata.utils.path_safety import resolve_within
 from strata.utils.value_tokens import has_value_tokens
@@ -296,7 +297,7 @@ def _reset_slot_directory(build_path: Path, destination: Path, asset_name: str) 
         return
     try:
         resolve_within(build_path / "assets", destination)
-        shutil.rmtree(destination)
+        when_released(lambda: shutil.rmtree(destination))  # an earlier build's files, perhaps still being scanned
     except (ValueError, OSError) as exc:
         raise SourceSyncError(f"Asset '{asset_name}': could not clear '{destination}' before copying: {exc}") from exc
 

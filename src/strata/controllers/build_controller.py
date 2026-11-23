@@ -121,6 +121,7 @@ from strata.utils.dependency_order import topological_order
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.env_file import load_env_file
 from strata.utils.errors import StrataError, SystemError, UsageError
+from strata.utils.file_release import when_released
 from strata.utils.layout import helm_cache_dir
 from strata.utils.sbom_file import SBOM_FILENAME
 from strata.utils.terraform_outputs import read_declared_outputs
@@ -741,7 +742,8 @@ def build_run(
             _step(f"would clean {build_path}")
         else:
             try:
-                shutil.rmtree(build_path)
+                # The previous build may be seconds old: on Windows a scanner can still hold one of its files.
+                when_released(lambda: shutil.rmtree(build_path))
             except OSError as exc:
                 raise BuildCleanError(f"Could not clean build_path '{build_path}': {exc}") from exc
             _step(f"cleaned {build_path}")

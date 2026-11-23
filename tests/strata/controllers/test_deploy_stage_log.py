@@ -92,3 +92,33 @@ def test_findings_are_filed_under_the_step_they_name():
     [stage] = log.stages(diagnostics)
 
     assert (stage.warnings, stage.messages, stage.errors) == (["a: slow"], ["a: not pushed"], None)
+
+
+def test_a_stages_check_answers_are_recorded():
+    from strata.models.audit_manifest_model import ManifestCheckModel
+
+    log, diagnostics = _log("a")
+    log.begin("a")
+    log.phase("apply")
+    log.phase("verify")
+    log.record_checks("a", [ManifestCheckModel(name="web", answer="pass", attempts=2, duration_seconds=12.0)])
+    log.finish()
+
+    [stage] = log.stages(diagnostics)
+
+    assert [(check.name, check.answer, check.attempts) for check in stage.checks] == [("web", "pass", 2)]
+    assert [phase.step for phase in stage.steps] == ["apply", "verify"]
+
+
+def test_the_deployments_checks_and_verified():
+    """docs/design/post-deploy-verification.md, D9: `verified` is left out when no check ran, so "not checked" is
+    never read as "verified"."""
+    from strata.models.audit_manifest_model import ManifestCheckModel
+
+    log, _ = _log("a")
+    assert log.verified() is None
+    log.record_checks("a", [ManifestCheckModel(name="web", answer="pass", attempts=1)])
+    assert log.verified() is True
+    log.record_deployment_checks([ManifestCheckModel(name="e2e", answer="unknown", attempts=1)])
+    assert [check.name for check in log.deployment_checks()] == ["e2e"]
+    assert log.verified() is False

@@ -26,10 +26,13 @@ existence already vetted; an unresolved reference produces no duplicate
 finding here — `validate_references` already reported it.
 """
 
-from collections.abc import Callable
+import os
+import re
+import ssl
+from collections.abc import Callable, Mapping
 from difflib import get_close_matches
 from itertools import combinations
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, cast
 
 from jsonschema.exceptions import SchemaError
@@ -60,7 +63,7 @@ from strata.models.asset_model import AssetModel
 from strata.models.attributeconfig_model import AttributeConfigModel
 from strata.models.common_models import ModuleReferenceModel, PlatformKind, SourceModel
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel, PathConventionModel
-from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel
+from strata.models.deployment_model import AnyDeploymentModel, DeploymentModel, DeploymentVerifyModel
 from strata.models.dns_model import DnsModel
 from strata.models.environment_model import EnvironmentModel
 from strata.models.integration_model import Capability, IntegrationModel
@@ -69,7 +72,7 @@ from strata.models.namespace_model import NamespaceModel
 from strata.models.network_model import NetworkModel
 from strata.models.provider_config_model import ProviderConfigModel
 from strata.models.provider_model import ProviderModel
-from strata.models.provisioning_model import ProvisionerGitOpsModel
+from strata.models.provisioning_model import ProvisionerGitOpsModel, ProvisioningStepModel
 from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import RemoteFetch, RemoteType, SolutionModel, SolutionRemoteModel
 from strata.models.template_model import DocumentTemplateModel
@@ -99,10 +102,12 @@ from strata.services.resource_service import ResourceService
 from strata.services.tenant_service import TenantService
 from strata.services.workspace_service import WorkspaceService, effective_assets, effective_providers
 from strata.utils.builtin_types import ProvisionerType
+from strata.utils.dependency_order import upstream_of
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.layout import manifest_path
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 from strata.utils.report_template import check_report_template
+from strata.utils.value_tokens import extract_value_tokens
 
 log = get_logger(__name__)
 
@@ -209,7 +214,212 @@ def _check_deployments(
         diagnostics.extend(_check_deployment_fetch_credentials(index, deployment, solution), source=str(entry.source))
         diagnostics.extend(_check_deployment_target_contexts(index, deployment), source=str(entry.source))
         diagnostics.extend(_check_deployment_documentation(index, deployment, root), source=str(entry.source))
+        diagnostics.extend(_check_deployment_verify_files(deployment, root), source=str(entry.source))
+        if workspace is not None:
+            diagnostics.extend(_check_deployment_verify_outputs(deployment, workspace), source=str(entry.source))
     return diagnostics
+
+
+#: A string inside a deployment's `verify` block (a stage's, or `spec.verify`), as `unresolved_value_tokens()` writes
+#: its path.
+_VERIFY_CHECK_PATH = re.compile(r"^spec\.(stages\[\d+\]\.)?verify\.")
+
+
+def _is_verify_check_path(path: str) -> bool:
+    """`${output:}` tokens here are judged by `_check_deployment_verify_outputs()`, not refused as unsupported."""
+    return _VERIFY_CHECK_PATH.match(path) is not None
+
+
+def _check_deployment_verify_outputs(deployment: DeploymentModel, workspace: WorkspaceModel) -> Diagnostics:
+    """Every `${output:STEP.KEY}` in a `verify` check names a step whose outputs the check will have.
+
+    A stage's check runs right after its step, with that step's outputs and those of the steps it depends on
+    (directly or through others), from this run or the `output_store` (docs/design/post-deploy-verification.md, D5).
+    Any other step may not have run yet, or may not run at all with `--stage`, so it is refused here rather than
+    failing as an unknown check at deploy. A `spec.verify` check runs after every step, so it may read any step of
+    the workspace. Only the step is checked: which keys a step outputs is known only once it ran. A disabled block
+    or check is not judged.
+    """
+    diagnostics = Diagnostics()
+    execution = {step.name: step for step in workspace.spec.execution or []}
+    # (owner, path, block, steps it may read, why another step is refused, hint)
+    blocks: list[tuple[str, str, DeploymentVerifyModel, set[str], str, str]] = []
+    for stage_index, stage in enumerate(deployment.spec.stages or []):
+        if stage.verify is None or stage.step not in execution:
+            continue  # an unknown stage step is reported by `validate_stages_against_workspace()`
+        available = _step_and_upstream(stage.step, execution)
+        blocks.append(
+            (
+                f"of stage '{stage.step}'",
+                f"spec.stages.{stage_index}.verify",
+                stage.verify,
+                available,
+                f"is neither '{stage.step}' nor a step it depends on, so it may not have run",
+                f"Use an output of '{stage.step}' or of a step it depends on: {sorted(available)}; or add the step to "
+                f"'{stage.step}''s depends_on in the workspace.",
+            )
+        )
+    if deployment.spec.verify is not None:
+        blocks.append(
+            (
+                "of the deployment",
+                "spec.verify",
+                deployment.spec.verify,
+                set(execution),
+                "is not in the workspace",
+                f"Use an output of a step of workspace '{workspace.meta.name}': {sorted(execution)}.",
+            )
+        )
+    for owner, path, block, available, not_available, hint in blocks:
+        if not block.enabled:
+            continue
+        for check_index, check in enumerate(block.checks):
+            if not check.enabled:
+                continue  # how a child drops a base's check: it never runs, so what it reads does not matter
+            base = f"{path}.checks.{check_index}"
+            for field_path, text in check.token_fields():
+                location = f"{base}.{field_path}"
+                for kind, key in extract_value_tokens(text):
+                    if kind != "output":
+                        continue
+                    step, dot, output_key = key.partition(".")
+                    if step in available and dot and output_key:
+                        continue
+                    if not (dot and output_key):
+                        why = "it must name a step and an output, as '${output:STEP.KEY}'"
+                    elif step not in execution:
+                        why = f"step '{step}' is not in workspace '{workspace.meta.name}'"
+                    else:
+                        why = f"step '{step}' {not_available}"
+                    diagnostics.error(
+                        f"Deployment '{deployment.meta.name}': verify check '{check.name}' {owner} uses "
+                        f"'${{output:{key}}}', but {why}.",
+                        location=location,
+                        code="verify_output_unavailable",
+                        hint=hint,
+                    )
+    return diagnostics
+
+
+#: Interpreters whose script argument `_verify_script_paths()` finds: the value after `-File` for PowerShell, the
+#: first argument that is not an option for the others. An inline program (`-c`, `-m`, `-e`, `-Command`) has none.
+_FILE_OPTION_INTERPRETERS = frozenset({"pwsh", "powershell"})
+_FIRST_ARGUMENT_INTERPRETERS = frozenset({"bash", "sh", "zsh", "python", "python3", "py", "node"})
+_INLINE_PROGRAM_OPTIONS = frozenset({"-c", "-m", "-e", "-p", "--eval", "--print", "-command", "-encodedcommand"})
+#: Options of those interpreters whose value is the next argument (`bash -o pipefail`, `python -W ignore`), so the
+#: value is not taken for the script.
+_OPTIONS_WITH_A_VALUE = frozenset(
+    {"-o", "+o", "-O", "+O", "--rcfile", "--init-file", "-W", "-X", "-r", "--require", "--import", "--loader"}
+)
+
+
+def _looks_like_a_file(value: str) -> bool:
+    """A directory part or an extension: an argument the parsing above misread (the value of an option it does not
+    know) is then not reported as a missing script."""
+    return "/" in value or "\\" in value or bool(PureWindowsPath(value).suffix)
+
+
+def _in_solution(value: str) -> bool:
+    """A path `validate` can judge: relative, so the check resolves it against the solution root, and without
+    tokens. An absolute path (on Linux or on Windows) names a file on the machine that deploys, which need not be
+    this one."""
+    absolute = value.startswith(("/", "\\")) or PureWindowsPath(value).is_absolute() or Path(value).is_absolute()
+    return bool(value) and "${" not in value and "://" not in value and not absolute
+
+
+def _verify_script_paths(run: list[str]) -> list[tuple[int, str]]:
+    """The files of the solution a `script` check's `run` needs, with their index in `run`: `run[0]` when it is a
+    path (a bare name is found on PATH, which only the deploying machine knows), and the script an interpreter
+    runs (`[pwsh, -File, checks/x.ps1]`, `[python, checks/x.py]`), resolved against the solution root like the
+    check's working directory."""
+    if not run:
+        return []
+    found: list[tuple[int, str]] = []
+    executable = run[0]
+    if ("/" in executable or os.sep in executable) and _in_solution(executable):
+        found.append((0, executable))
+    interpreter = Path(executable.replace("\\", "/")).name.lower().removesuffix(".exe")
+    arguments = list(enumerate(run))[1:]
+    if interpreter in _FILE_OPTION_INTERPRETERS:
+        for (_, option), (index, value) in zip(arguments, arguments[1:], strict=False):
+            if option.lower() in ("-file", "-f"):
+                found.append((index, value))
+                break
+    elif interpreter in _FIRST_ARGUMENT_INTERPRETERS:
+        skip_next = False
+        for index, value in arguments:
+            if skip_next:
+                skip_next = False
+                continue
+            if value.lower() in _INLINE_PROGRAM_OPTIONS:
+                break
+            if value in _OPTIONS_WITH_A_VALUE:
+                skip_next = True
+                continue
+            if not value.startswith(("-", "+")):
+                if _looks_like_a_file(value):
+                    found.append((index, value))
+                break
+    return [(index, value) for index, value in found if _in_solution(value)]
+
+
+def _check_deployment_verify_files(deployment: DeploymentModel, root: Path | None) -> Diagnostics:
+    """The solution's files an enabled check needs are there (docs/design/post-deploy-verification.md, D12): the
+    script a `script` check runs, and the PEM file an `http` check's `ca_file` trusts, loaded as the check will.
+    Found at deploy time instead, the check could not answer, and by default (`on_unknown: block`) the run would stop
+    after its step was applied. Only relative paths without tokens are judged (`_in_solution()`). A disabled check or
+    block is not judged; neither is a partial base, which a deployment that extends it is judged for."""
+    diagnostics = Diagnostics()
+    if root is None or deployment.spec.partial:
+        return diagnostics
+    name = deployment.meta.name
+    blocks = [(f"spec.stages.{index}.verify", stage.verify) for index, stage in enumerate(deployment.spec.stages or [])]
+    blocks.append(("spec.verify", deployment.spec.verify))
+    for path, block in blocks:
+        if block is None or not block.enabled:
+            continue
+        for check_index, check in enumerate(block.checks):
+            if not check.enabled:
+                continue
+            base = f"{path}.checks.{check_index}"
+            if check.type == "script":
+                for run_index, script in _verify_script_paths(check.run or []):
+                    if (root / script).is_file():
+                        continue
+                    diagnostics.error(
+                        f"Deployment '{name}': verify check '{check.name}' runs '{script}', which does not exist in "
+                        "the solution. The check could not answer at deploy time.",
+                        location=f"{base}.run.{run_index}",
+                        code="verify_script_missing",
+                        hint="A relative path in run is resolved against the solution root: fix the path, or commit "
+                        "the script with the solution.",
+                    )
+            if check.ca_file is None or not _in_solution(check.ca_file):
+                continue
+            ca_path = root / check.ca_file
+            if not ca_path.is_file():
+                problem = "does not exist"
+            else:
+                try:
+                    ssl.create_default_context(cafile=str(ca_path))
+                    continue
+                except (OSError, ssl.SSLError, ValueError) as exc:
+                    problem = f"holds no certificate strata can read ({exc})"
+            diagnostics.error(
+                f"Deployment '{name}': verify check '{check.name}' trusts ca_file '{check.ca_file}', which "
+                f"{problem}. The check could not answer at deploy time.",
+                location=f"{base}.ca_file",
+                code="verify_ca_file_unusable",
+                hint="Point ca_file at a PEM file of the certificate authorities to trust, relative to the solution "
+                "root, and commit it with the solution.",
+            )
+    return diagnostics
+
+
+def _step_and_upstream(name: str, execution: Mapping[str, ProvisioningStepModel]) -> set[str]:
+    """`name` and every step it depends on, directly or through others: what `deploy run` gives its checks, by
+    the same `upstream_of()`."""
+    return {name} | upstream_of(name, {step: model.depends_on or [] for step, model in execution.items()})
 
 
 def _check_deployment_documentation(
@@ -1620,21 +1830,67 @@ def _check_deployment_value_tokens(index: DocumentIndex, resolved: dict[str, Dep
         owner = "+".join(deployment.spec.environments or []) or "(none)"
         artifact_values = artifact_token_values(index, deployment) if check_deployment_tokens else {}
         for reached in documents_reached_by_deployment(index, deployment, entry.source):
+            found = Diagnostics()
             if declared is not None:
-                diagnostics.extend(
-                    unresolved_value_tokens(reached.model, declared, owner, output_claimed=reached.claimed),
-                    source=str(reached.source),
+                found.extend(
+                    unresolved_value_tokens(
+                        reached.model,
+                        declared,
+                        owner,
+                        output_claimed=reached.claimed,
+                        output_judged_elsewhere=_is_verify_check_path,
+                    )
                 )
             if check_deployment_tokens:
-                diagnostics.extend(
-                    unresolved_deployment_tokens(reached.model, deployment.meta.name, deployment.spec.tenant),
-                    source=str(reached.source),
+                found.extend(
+                    unresolved_deployment_tokens(
+                        reached.model,
+                        deployment.meta.name,
+                        deployment.spec.tenant,
+                        kube_context=deployment.spec.kube_context,
+                        docker_context=deployment.spec.docker_context,
+                    )
                 )
-                diagnostics.extend(
-                    unresolved_artifact_tokens(reached.model, artifact_values, deployment.meta.name),
-                    source=str(reached.source),
-                )
+                found.extend(unresolved_artifact_tokens(reached.model, artifact_values, deployment.meta.name))
+            if reached.model is deployment:
+                found = _without_disabled_verify_checks(found, deployment)
+            diagnostics.extend(found, source=str(reached.source))
     return diagnostics
+
+
+def _disabled_verify_paths(deployment: DeploymentModel) -> tuple[str, ...]:
+    """The paths, as the token findings write them, of every disabled `verify` block and check of `deployment` (the
+    merged one, so a child's `enabled: false` on a base's check is seen)."""
+    blocks = [
+        (f"spec.stages[{index}].verify", stage.verify) for index, stage in enumerate(deployment.spec.stages or [])
+    ]
+    blocks.append(("spec.verify", deployment.spec.verify))
+    paths: list[str] = []
+    for path, block in blocks:
+        if block is None:
+            continue
+        if not block.enabled:
+            paths.append(path)
+            continue
+        paths.extend(f"{path}.checks[{index}]" for index, check in enumerate(block.checks) if not check.enabled)
+    return tuple(paths)
+
+
+def _without_disabled_verify_checks(found: Diagnostics, deployment: DeploymentModel) -> Diagnostics:
+    """`found` without the token findings inside a disabled `verify` block or check (docs/design/
+    post-deploy-verification.md, D12): `enabled: false` is how a child drops a base's check, and a check that never
+    runs needs none of its tokens, such as `${deployment:kube_context}` on a child that sets no `kube_context`."""
+    disabled = _disabled_verify_paths(deployment)
+    if not disabled:
+        return found
+    kept = Diagnostics()
+    for item in found:
+        location = item.location or ""
+        # `checks[1]` covers `checks[1].run[0]`, never `checks[10]`.
+        if any(location.startswith(path) and location[len(path) :][:1] in ("", ".", "[") for path in disabled):
+            continue
+        kept.items.append(item)
+    return kept
 
 
 def _check_script_values(index: DocumentIndex, resolved: dict[str, DeploymentModel]) -> Diagnostics:
