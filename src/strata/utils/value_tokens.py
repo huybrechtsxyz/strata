@@ -22,7 +22,7 @@ dots, no regex redesign needed); resolving `kind.name.path` against a real
 `DocumentIndex` is `value_references.py`'s job (`resolve_document_value_references()`),
 not this module's — same kind-agnostic split `output` already established.
 
-A 6th kind, ``${deployment:KEY}`` (``KEY`` is ``name`` or ``tenant``), is a
+A 6th kind, ``${deployment:KEY}`` (``KEY`` is ``name``, ``tenant``, ``kube_context`` or ``docker_context``), is a
 built-in for the deployment being run (docs/design/deployment-tokens.md): a
 workspace is shared by every deployment, so nothing declared in a document
 can say which one is running. Its flat-map key is ``deployment:<KEY>``, not
@@ -85,7 +85,7 @@ _RESOLVE_VALUE_TOKEN_PATTERN = re.compile(
 
 
 #: The keys ``${deployment:KEY}`` accepts (docs/design/deployment-tokens.md).
-DEPLOYMENT_TOKEN_KEYS = ("name", "tenant")
+DEPLOYMENT_TOKEN_KEYS = ("name", "tenant", "kube_context", "docker_context")
 
 _DEPLOYMENT_PREFIX = "deployment"
 
@@ -141,17 +141,21 @@ def _deployment_key(key: str) -> str:
     return f"{_DEPLOYMENT_PREFIX}:{key}"
 
 
-def deployment_token_values(name: str, tenant: str | None) -> dict[str, str]:
+def deployment_token_values(
+    name: str, tenant: str | None, *, kube_context: str | None = None, docker_context: str | None = None
+) -> dict[str, str]:
     """The ``deployment:<key>`` entries of the flat token map for one deployment.
 
-    `tenant` is left out when the deployment has none, so ``${deployment:tenant}``
-    then fails like any other unresolved token instead of substituting an empty
-    string into, say, a state key. One function builds the entries so deploy-time
-    resolution and `strata validate` cannot disagree about what exists.
+    `tenant`, `kube_context` and `docker_context` are left out when the deployment
+    has none, so ``${deployment:tenant}`` then fails like any other unresolved
+    token instead of substituting an empty string into, say, a state key. One
+    function builds the entries so deploy-time resolution and `strata validate`
+    cannot disagree about what exists.
     """
     values = {_deployment_key("name"): name}
-    if tenant:
-        values[_deployment_key("tenant")] = tenant
+    for key, value in (("tenant", tenant), ("kube_context", kube_context), ("docker_context", docker_context)):
+        if value:
+            values[_deployment_key(key)] = value
     return values
 
 

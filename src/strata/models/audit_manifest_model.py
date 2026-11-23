@@ -169,12 +169,23 @@ class ManifestArtifactsModel(PlatformBaseModel):
 
 
 class ManifestStepModel(PlatformBaseModel):
-    """One phase of a stage: `setup`, `check`, `plan`, `apply` or `destroy`, the names a deployment stage's
-    `timeouts` use."""
+    """One phase of a stage: `setup`, `check`, `plan`, `apply`, `destroy` or `verify`, the names a deployment
+    stage's `timeouts` use."""
 
-    step: str = Field(description="Phase name: 'setup', 'check', 'plan', 'apply' or 'destroy'")
+    step: str = Field(description="Phase name: 'setup', 'check', 'plan', 'apply', 'destroy' or 'verify'")
     success: bool = Field(description="Whether this phase succeeded")
     duration_seconds: float | None = Field(default=None, description="Wall-clock duration in seconds")
+
+
+class ManifestCheckModel(PlatformBaseModel):
+    """One verify check's final answer (docs/design/post-deploy-verification.md, D9). The message is the first line
+    the check printed, secrets masked."""
+
+    name: str = Field(description="The check's name")
+    answer: Literal["pass", "warn", "fail", "unknown"] = Field(description="The final answer")
+    attempts: int = Field(description="How many times the check ran")
+    duration_seconds: float | None = Field(default=None, description="Wall-clock duration, waiting included")
+    message: str | None = Field(default=None, description="The check's own message, secrets masked")
 
 
 class ManifestStageModel(PlatformBaseModel):
@@ -191,6 +202,9 @@ class ManifestStageModel(PlatformBaseModel):
     completed_at: str | None = Field(default=None, description="ISO-8601 completion timestamp")
     duration_seconds: float | None = Field(default=None, description="Wall-clock duration in seconds")
     steps: list[ManifestStepModel] | None = Field(default=None, description="Per-phase outcome and timing")
+    checks: list[ManifestCheckModel] | None = Field(
+        default=None, description="The answers of the stage's verify checks, when they ran"
+    )
     errors: list[str] | None = Field(default=None, description="Error messages if the stage failed")
     warnings: list[str] | None = Field(default=None, description="Non-fatal warnings recorded for this stage")
     messages: list[str] | None = Field(default=None, description="Informational messages recorded for this stage")
@@ -294,6 +308,16 @@ class DeploymentManifestModel(PlatformBaseModel):
 
     # Stages
     stages: list[ManifestStageModel] | None = Field(default=None, description="Results of each deployment stage")
+
+    # Verification (docs/design/post-deploy-verification.md, D9): the stages' checks are in `stages[].checks`
+    checks: list[ManifestCheckModel] | None = Field(
+        default=None, description="The answers of the deployment's own `spec.verify` checks, when they ran"
+    )
+    verified: bool | None = Field(
+        default=None,
+        description="Whether every verify check that ran answered pass or warn; left out when no check ran (none "
+        "declared, or `--no-verify`), so 'not checked' is never read as 'verified'",
+    )
 
     # Satellite references — reference-only pattern, applied consistently
     # No `outputs` (step outputs go to the workspace's output store, not a file) and no `signatures` (nothing signs).

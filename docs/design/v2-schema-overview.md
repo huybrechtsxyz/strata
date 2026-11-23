@@ -1,7 +1,7 @@
 # v2 Schema — Kind Overview
 
 - Status: current
-- Last updated: 2026-10-20
+- Last updated: 2026-11-23
 
 ## Overview
 
@@ -59,6 +59,7 @@ status changes.
 | v1 schema audit resolution                                                                              | Tracks resolution of ADR-0001's 14 original findings                                                                                 | Resolved; the tracker is removed                                                                                                                                                                                                                                            | `v1-schema-parity-tracking.md` (removed work doc; its open items are GitHub issues)                                                                                                                                                 |
 | Security gates (`release_gate_policy`/`image_gate_policy`, `strata policy`, `strata integration check`) | Deploy-time verdicts from a security platform, behind the `release_gate`/`image_findings` capabilities                               | Implemented (Aikido first): the gates at deploy preflight, `strata policy list/check/findings` for the gates, `cve_policy` and `checkov_policy`, `strata integration check`; Aikido's API behaviour is confirmed on first use against a real workspace | [security-gates.md](security-gates.md), [aikido-api-reference.md](../archive/aikido-api-reference.md)                                                                                                                |
 | `image_tag_policy` (workspace)                                                                          | Opt-in guard rail on the tag of every image a deployment runs: no tag, floating tag, tag pattern, required pin, per-ring, allow list | Implemented: judged by `build run`, `deploy run`, `deploy images` and `strata policy check`; offline                                                                                                                                                   | [image-tag-policy.md](image-tag-policy.md), [workspace.md](../config/workspace.md)                                                                                                                                   |
+| Post-deploy verification (`stages[].verify`, `spec.verify`, `strata deploy verify`) | Checks after a step's apply or destroy (`script`, `http`, `tcp`, `helm`) that wait for the workload and decide whether the run succeeded | Implemented: run by `deploy run`/`apply`/`destroy` and `deploy verify`; recorded in the manifest, metrics, events and handover document; judged by `strata validate` | [post-deploy-verification.md](post-deploy-verification.md), [ADR-0066](../decisions/0066-post-deploy-verification-is-a-deploy-phase.md), [ADR-0067](../decisions/0067-verify-checks-use-the-gates-semantics.md) |
 
 ## Related Decisions
 
@@ -129,4 +130,5 @@ which kind/concept.
 - 2026-11-13: Parameter sets read by deployments, environments and tenants (`meta.params`, `${param:}`),
   with `extends`/`partial` on environments and tenants and `strata render`
   ([parameter-sets.md](parameter-sets.md)).
+- 2026-11-23: Post-deploy verification row added ([post-deploy-verification.md](post-deploy-verification.md)).
 

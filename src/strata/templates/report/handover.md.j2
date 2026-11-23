@@ -4,6 +4,13 @@
 
 {% if audit -%}
 Deployed {{ audit.completed_at }} by `{{ audit.deployed_by }}`{% if audit.commit_sha %} from commit `{{ audit.commit_sha[:7] }}`{% endif %}{% if audit.execution_id %}, audit record `{{ audit.execution_id }}`{% endif %}.
+{% if audit.verification == "verified" -%}
+Verified: the verify checks said the deployment works.
+{% elif audit.verification == "verification_failed" -%}
+Not verified: a verify check failed or could not answer, reported as a warning only; see the audit record.
+{% elif audit.verification == "not_verified" -%}
+Not verified: no verify check ran.
+{% endif -%}
 {% endif -%}
 Workspace `{{ workspace }}`, environments {% for name in environments %}`{{ name }}`{{ ", " if not loop.last }}{% endfor %}.
 Generated {{ generated_at }} from the outputs recorded by `deploy run`: a snapshot, not a live view.

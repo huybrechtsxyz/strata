@@ -84,14 +84,17 @@ without copying it.
 **`_metrics.json`** ([audit_metrics_model.py](../../src/strata/models/audit_metrics_model.py)) is the lean sibling,
 meant to be shipped to dashboards and SIEMs more freely:
 
-- `dimensions` (what to slice by: `outcome`, `action`, `environment`, the deployment's `tenant`, `actor`, and the
-  manifest's `commit_sha`), `measures` (what to add up: `duration_seconds`, the stage counts, and
+- `dimensions` (what to slice by: `outcome`, `action`, `environment`, the deployment's `tenant`, `actor`, the
+  manifest's `commit_sha`, and `verification`: `verified`, `verification_failed` or `not_verified`, the manifest's
+  `verified` as one word), `measures` (what to add up: `duration_seconds`, the stage counts,
   `policy_checks_total`/`policy_checks_failed`, counted from `policy_results`, a check that did not pass counting as
-  failed whatever its enforcement, and left out when no policy was judged). A measure that is left out was not
-  measured, because `null` cannot tell "not measured" from "zero";
+  failed whatever its enforcement, and left out when no policy was judged; and `checks_total`/`checks_failed`, the
+  verify checks of the stages and of `spec.verify`, a check that failed or could not answer counting as failed
+  whatever its enforcement, left out when no check ran). A measure that is left out was not measured, because
+  `null` cannot tell "not measured" from "zero";
 - `error_category` on a failed or partial run, a bounded enum (`auth`, `quota`, `timeout`, `conflict`, `policy`,
-  `network`, `state_lock`, `unknown`; see "Why a run failed"). Raw error text stays in the manifest; a failing
-  Terraform run can print a connection string;
+  `network`, `state_lock`, `verification`, `unknown`; see "Why a run failed"). Raw error text stays in the manifest;
+  a failing Terraform run can print a connection string;
 - `label_safe`, the dimensions bounded enough to use as metric labels (`execution_id`, `actor` and `commit_sha` are
   not).
 
@@ -101,7 +104,9 @@ history (or a future event) and are left to whoever aggregates the records.
 **The event is rendered, never written.** An integration sink gets a CloudEvents 1.0 envelope with ECS fields,
 rendered from the manifest or metrics at send time (`audit_event_rendering.py`). It points to the manifest by path
 and hash instead of carrying it, and gets a fresh `id` on every send. Its `event.outcome` uses the ECS values:
-`success`, or `failure` for a failed or partial run.
+`success`, or `failure` for a failed or partial run. `labels.verification` says what the verify checks said
+(`verified`, `verification_failed`, `not_verified`), so a rule can tell a deploy that works from one that only
+applied; a metrics record written before it existed has no such label.
 
 ### Why a run failed
 
@@ -111,14 +116,17 @@ by signals strata produces itself, or a tool message that does not change betwee
 
 1. `policy`: a policy result with `enforcement: deny` that did not pass. The gates run before any step, so a denial
    is the cause.
-2. An error code a deploy raises, in run order: `integration_credentials_unresolved`, `helm_registry_auth_failed` and
+2. `verification`: every error is a verify check's answer (`verify_check_failed`, `verify_check_unknown`). The
+   steps were applied and the deployed workload does not work, so the workload is the problem, not the deploy. A
+   check that could not be set up (`verify_outputs_unavailable`) is not this.
+3. An error code a deploy raises, in run order: `integration_credentials_unresolved`, `helm_registry_auth_failed` and
    `helm_registry_credentials_invalid` are `auth`.
-3. A marker in an error's text: strata's own "timed out and was killed" is `timeout`; Terraform's "Error acquiring
+4. A marker in an error's text: strata's own "timed out and was killed" is `timeout`; Terraform's "Error acquiring
    the state lock" is `state_lock`.
 
 `quota`, `network` and `conflict` have no signal in a deploy yet: the clouds word them differently, inside tool
 output. `integration_unreachable` and `integration_credentials_rejected` come only from `strata integration test`,
-and `helm_release_conflict` from `validate`. A new deploy code that names a cause is added to the table in step 2.
+and `helm_release_conflict` from `validate`. A new deploy code that names a cause is added to the table in step 3.
 
 ### Stages
 

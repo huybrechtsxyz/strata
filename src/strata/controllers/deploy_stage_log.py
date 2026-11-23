@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Literal
 
-from strata.models.audit_manifest_model import ManifestStageModel, ManifestStepModel
+from strata.controllers.verification import all_verified
+from strata.models.audit_manifest_model import ManifestCheckModel, ManifestStageModel, ManifestStepModel
 from strata.utils.diagnostics import Diagnostics, Severity
 
 #: Why a step that never started did not run.
@@ -46,6 +47,7 @@ class _Stage:
     ran_to_end: bool = False
     skip_reason: str | None = None
     phases: list[_Phase] = field(default_factory=list)
+    checks: list[ManifestCheckModel] = field(default_factory=list)
 
 
 class StageLog:
@@ -55,6 +57,7 @@ class StageLog:
         self._stages: dict[str, _Stage] = {}
         self._current: _Stage | None = None
         self._diagnostics = Diagnostics()
+        self._deployment_checks: list[ManifestCheckModel] = []
 
     def expect(self, steps: Sequence[tuple[str, str | None]], diagnostics: Diagnostics) -> None:
         """The steps this run means to run, in order, as `(step, provisioner)`; `diagnostics` is the run's own bag,
@@ -82,6 +85,26 @@ class StageLog:
         """The current phase ended, so work after it (collecting outputs) is not counted in it."""
         if self._current is not None and self._current.phases:
             self._end(self._current.phases[-1])
+
+    def record_checks(self, step: str, checks: Sequence[ManifestCheckModel]) -> None:
+        """The answers of `step`'s verify checks (docs/design/post-deploy-verification.md, D9)."""
+        self._stages.setdefault(step, _Stage(step, None)).checks.extend(checks)
+
+    def record_deployment_checks(self, checks: Sequence[ManifestCheckModel]) -> None:
+        """The answers of the deployment's own `spec.verify` checks, run after every step (D2, D9)."""
+        self._deployment_checks.extend(checks)
+
+    def deployment_checks(self) -> list[ManifestCheckModel]:
+        """What `record_deployment_checks()` recorded: the manifest's top-level `checks`."""
+        return list(self._deployment_checks)
+
+    def verified(self) -> bool | None:
+        """The manifest's `verified`: `None` when no check ran (none declared, `--no-verify`, or the run stopped
+        first), `True` when every check that ran answered pass or warn, `False` when one failed or could not
+        answer, whatever its `enforcement` made of it. Whether every step ran is the manifest's `status`."""
+        return all_verified(
+            [*(check for stage in self._stages.values() for check in stage.checks), *self._deployment_checks]
+        )
 
     def skip(self, step: str, reason: str) -> None:
         """`step` does not run, for `reason`."""
@@ -124,6 +147,7 @@ class StageLog:
                         for phase in stage.phases
                     ]
                     or None,
+                    checks=list(stage.checks) or None,
                     errors=errors or None,
                     warnings=[str(item) for item in located if item.severity is Severity.WARNING] or None,
                     messages=[str(item) for item in located if item.severity is Severity.INFO] or None,

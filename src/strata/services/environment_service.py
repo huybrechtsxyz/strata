@@ -2,7 +2,7 @@
 """Service for loading and validating environment configuration."""
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from strata.models.common_models import PlatformBaseModel
@@ -301,7 +301,12 @@ class EnvironmentService(BaseService[EnvironmentModel]):
 
 
 def unresolved_value_tokens(
-    model: PlatformBaseModel, declared: dict[str, set[str]], owner_name: str, *, output_claimed: bool = False
+    model: PlatformBaseModel,
+    declared: dict[str, set[str]],
+    owner_name: str,
+    *,
+    output_claimed: bool = False,
+    output_judged_elsewhere: Callable[[str], bool] | None = None,
 ) -> Diagnostics:
     """Check every Value token in `model` against an already-computed declared-keys set.
 
@@ -340,6 +345,9 @@ def unresolved_value_tokens(
             validation" — unchanged by this parameter, only the false
             rejection is fixed). `False` (default) preserves every existing
             caller's behavior unchanged.
+        output_judged_elsewhere: True for a field path whose `${output:}` tokens another check judges, so they are
+            neither accepted nor rejected here: a deployment stage's `verify` checks, which run after the step and
+            read its outputs (`semantic_checks._check_deployment_verify_outputs()`).
 
     A `${param:}` token is malformed here, as in any run-time check: a deployment that holds one is loaded as a
     template and checked only once resolved, with every `${param:}` substituted.
@@ -386,6 +394,8 @@ def unresolved_value_tokens(
                 # `declared[kind]` lookup that would otherwise misreport
                 # it as `unsupported_value_token_kind`.
                 continue
+            if kind == "output" and output_judged_elsewhere is not None and output_judged_elsewhere(path):
+                continue
             if kind == "output" and output_claimed:
                 # Accepted — some execution step's `targets` claims this
                 # document (gap #12), so a real step can legitimately
@@ -420,7 +430,14 @@ def unresolved_value_tokens(
     return diagnostics
 
 
-def unresolved_deployment_tokens(model: PlatformBaseModel, deployment_name: str, tenant: str | None) -> Diagnostics:
+def unresolved_deployment_tokens(
+    model: PlatformBaseModel,
+    deployment_name: str,
+    tenant: str | None,
+    *,
+    kube_context: str | None = None,
+    docker_context: str | None = None,
+) -> Diagnostics:
     """Check every ``${deployment:KEY}`` token in `model` against the deployment being validated.
 
     The counterpart of `unresolved_value_tokens()`, which skips this kind: a
@@ -433,15 +450,17 @@ def unresolved_deployment_tokens(model: PlatformBaseModel, deployment_name: str,
         model: Any already-validated strata document reachable from the deployment.
         deployment_name: The deployment's `meta.name`.
         tenant: The deployment's resolved `spec.tenant`, or `None`.
+        kube_context: The deployment's resolved `spec.kube_context`, or `None`.
+        docker_context: The deployment's resolved `spec.docker_context`, or `None`.
 
     Returns:
         One error per unknown key (`unknown_deployment_token`) and one per
-        `${deployment:tenant}` on a deployment with no tenant
-        (`unavailable_deployment_token`), each located at the field path
+        `${deployment:tenant}` (or `kube_context`, `docker_context`) on a deployment
+        without one (`unavailable_deployment_token`), each located at the field path
         where the token was written.
     """
     diagnostics = Diagnostics()
-    values = deployment_token_values(deployment_name, tenant)
+    values = deployment_token_values(deployment_name, tenant, kube_context=kube_context, docker_context=docker_context)
     dumped = model.model_dump(by_alias=True, mode="json")
     dumped.pop("meta", None)
     for path, text in _iter_strings(dumped):

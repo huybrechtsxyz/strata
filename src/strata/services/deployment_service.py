@@ -17,19 +17,31 @@ _EXTENDS_CONTROL_FIELDS = ("partial", "extends")
 #: (docs/design/provider-slots.md, docs/design/asset-management.md). Not listed -> replaced wholesale.
 LIST_MERGE_KEYS = {"stages": "step", "providers": "slot", "assets": "slot"}
 
-#: Keyed lists inside an item of a keyed list, merged the same way when two items merge: a stage's
-#: `health_checks` by `name`. Not listed -> replaced wholesale, as `deep_merge` does.
-NESTED_LIST_MERGE_KEYS: dict[str, dict[str, str]] = {"stages": {"health_checks": "name"}}
-
 #: Name lists that append base-first, each name once, like `environments`.
 APPEND_LISTS = ("environments", "configurations")
 
+#: A `verify` block's `checks` merge by `name`, on the spec and inside a stage (docs/design/post-deploy-verification.md
+#: D2): a child changes or disables (`enabled: false`) one of the base's checks without repeating the others.
+VERIFY_CHECK_MERGE_KEY = "name"
+
+
+def _merge_verify(base: dict[str, Any], child: dict[str, Any], merged: dict[str, Any]) -> None:
+    """Merge the `verify.checks` of two items by name into `merged`, which `deep_merge` built from them."""
+    base_verify, child_verify = base.get("verify"), child.get("verify")
+    base_checks = base_verify.get("checks") if isinstance(base_verify, dict) else None
+    child_checks = child_verify.get("checks") if isinstance(child_verify, dict) else None
+    if base_checks and child_checks:
+        merged["verify"] = {
+            **merged["verify"],
+            "checks": _merge_keyed_list(base_checks, child_checks, VERIFY_CHECK_MERGE_KEY),
+        }
+
 
 def _merge_keyed_list(
-    base: list[dict[str, Any]], child: list[dict[str, Any]], key: str, nested: dict[str, str] | None = None
+    base: list[dict[str, Any]], child: list[dict[str, Any]], key: str, *, merge_verify: bool = False
 ) -> list[dict[str, Any]]:
-    """Base items first; a child item with the same `key` deep-merges over it, new keys append. A `nested` list
-    in both items (field -> key) is merged by its own key instead of being replaced."""
+    """Base items first; a child item with the same `key` deep-merges over it, new keys append. With `merge_verify`
+    (stages), two merged items' `verify.checks` merge by name instead of being replaced."""
     by_key: dict[Any, dict[str, Any]] = {}
     order: list[Any] = []
     for item in [*base, *child]:
@@ -39,9 +51,8 @@ def _merge_keyed_list(
         if identity in by_key:
             earlier = by_key[identity]
             merged = deep_merge(earlier, item)
-            for field, field_key in (nested or {}).items():
-                if earlier.get(field) and item.get(field):
-                    merged[field] = _merge_keyed_list(earlier[field], item[field], field_key)
+            if merge_verify:
+                _merge_verify(earlier, item, merged)
             by_key[identity] = merged
         else:
             by_key[identity] = dict(item)
@@ -76,9 +87,9 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
     - **Keyed lists** (`LIST_MERGE_KEYS`: `stages` by `step`, `providers` and `assets` by
       `slot`) — a child item with the same key overrides the base's
       field-by-field; new keys are appended. Same "later wins per key" rule
-      environments already use for variables/secrets/features. Inside a
-      merged stage, `health_checks` merge by `name` the same way
-      (`NESTED_LIST_MERGE_KEYS`).
+      environments already use for variables/secrets/features.
+    - **`verify.checks`**, on the spec and inside a merged stage, by `name`: a child overrides one check
+      field-by-field or switches it off with `enabled: false`; the block's other fields deep-merge as usual.
     - **`environments`, `configurations`** (`APPEND_LISTS`) — base list first,
       then the child's names it lacks. Later environments win at
       value-resolution time, so the child still takes precedence.
@@ -97,12 +108,13 @@ def merge_deployment_specs(base: dict[str, Any], child: dict[str, Any]) -> dict[
         A new merged `spec` dict. Neither input is mutated.
     """
     merged: dict[str, Any] = deep_merge(base, child)
+    _merge_verify(base, child, merged)
 
     for field, key in LIST_MERGE_KEYS.items():
         base_items = base.get(field) or []
         child_items = child.get(field) or []
         if base_items or child_items:
-            merged[field] = _merge_keyed_list(base_items, child_items, key, NESTED_LIST_MERGE_KEYS.get(field))
+            merged[field] = _merge_keyed_list(base_items, child_items, key, merge_verify=field == "stages")
 
     for field in APPEND_LISTS:
         base_names = base.get(field) or []

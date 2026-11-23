@@ -159,6 +159,15 @@ def test_extend_attributes_a_source_when_missing():
     assert controller.items[0].location == "spec.x"
 
 
+def test_extend_keeps_every_field_when_it_attributes_a_source():
+    """Attributing a source once rebuilt the finding by hand and dropped its `hint` (docs/design/diagnostic-guidance.md)."""
+    service = Diagnostics()
+    service.warning("unused", location="spec.y", code="base_unused", hint="Delete it or extend it.")
+    controller = Diagnostics()
+    controller.extend(service, source="config/a.yaml")
+    assert controller.items[0] == dataclasses.replace(service.items[0], source="config/a.yaml")
+
+
 def test_extend_does_not_overwrite_an_existing_source():
     """A finding that already knows where it came from keeps it."""
     inner = Diagnostics()

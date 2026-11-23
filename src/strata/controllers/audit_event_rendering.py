@@ -34,7 +34,7 @@ import uuid
 from typing import Any
 
 from strata.models.audit_manifest_model import DeploymentManifestModel
-from strata.models.audit_metrics_model import DeploymentMetricsModel
+from strata.models.audit_metrics_model import DeploymentMetricsModel, verification_state
 from strata.models.common_models import CANONICAL_API_VERSION, PlatformVersion
 
 _EVENT_SOURCE_PREFIX = "/strata"
@@ -65,6 +65,7 @@ def _render_event(
     duration_seconds: float | None,
     relative_path: str,
     file_sha256: str,
+    verification: str | None,
 ) -> dict[str, Any]:
     """Build the shared CloudEvents 1.0 + ECS envelope both renderers use.
 
@@ -100,6 +101,9 @@ def _render_event(
                 "workspace": workspace,
                 "environment": environment,
                 "deployment": deployment,
+                # `verified`, `verification_failed` or `not_verified` (docs/design/post-deploy-verification.md, D9):
+                # a SIEM rule tells a deploy that worked from one that only applied. Left out of an older record.
+                **({"verification": verification} if verification is not None else {}),
             },
             "manifest": {"path": relative_path, "sha256": file_sha256},
         },
@@ -134,6 +138,7 @@ def render_manifest_event(
         duration_seconds=manifest.duration_seconds,
         relative_path=relative_path,
         file_sha256=file_sha256,
+        verification=verification_state(manifest.verified),
     )
 
 
@@ -164,4 +169,5 @@ def render_metrics_event(
         duration_seconds=metrics.measures.duration_seconds,
         relative_path=relative_path,
         file_sha256=file_sha256,
+        verification=metrics.dimensions.verification,
     )

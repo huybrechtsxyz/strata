@@ -64,6 +64,7 @@ def test_render_manifest_event_shape():
         "workspace": "main",
         "environment": "prod",
         "deployment": "fabrikam-prod",
+        "verification": "not_verified",
     }
     assert event["data"]["manifest"] == {
         "path": "hub1/spoke1/fabrikam/prod/20260930-143000/_manifest.json",
@@ -126,3 +127,21 @@ def test_a_failed_metrics_event_says_failure():
 def test_render_metrics_event_omp_api_version_uses_omp_type_prefix():
     event = render_metrics_event(_metrics(), relative_path="p", file_sha256="h", api_version=PlatformVersion.v2_omp)
     assert event["type"] == "com.omp.strata.deployment.measured"
+
+
+@pytest.mark.parametrize(
+    ("verified", "state"), [(True, "verified"), (False, "verification_failed"), (None, "not_verified")]
+)
+def test_both_events_say_whether_the_checks_verified_the_deployment(verified, state):
+    """docs/design/post-deploy-verification.md, D9: a SIEM rule tells a deploy that worked from one that only applied."""
+    manifest_event = render_manifest_event(_manifest(verified=verified), relative_path="p", file_sha256="h")
+    assert manifest_event["data"]["labels"]["verification"] == state
+    metrics = _metrics(
+        dimensions={"outcome": "success", "action": "deploy", "verification": state},
+    )
+    assert render_metrics_event(metrics, relative_path="p", file_sha256="h")["data"]["labels"]["verification"] == state
+
+
+def test_an_older_metrics_record_without_verification_has_no_label():
+    event = render_metrics_event(_metrics(), relative_path="p", file_sha256="h")
+    assert "verification" not in event["data"]["labels"]

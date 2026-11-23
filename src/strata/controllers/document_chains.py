@@ -308,7 +308,10 @@ def _resolve(
         holder_entry = require(index, kind, holder)
         written: Any = holder_entry.as_written
         spec = written.spec
-        own, problems = substitute_params(spec.model_dump(exclude_none=True), params, param_sets, "spec")
+        # As written (`exclude_unset`): a default dumped with a child would overwrite what its base set.
+        own, problems = substitute_params(
+            spec.model_dump(exclude_none=True, exclude_unset=True), params, param_sets, "spec"
+        )
         for problem in problems:
             diagnostics.error(
                 f"{holder} {problem.location}: {problem.message} (for {name})",

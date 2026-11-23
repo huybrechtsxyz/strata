@@ -198,41 +198,25 @@ def test_stage_rejects_empty_expression():
 
 
 # ---------------------------------------------------------------------------
-# Health checks, timeouts, locking
+# Removed health checks, timeouts, locking
 # ---------------------------------------------------------------------------
 
 
-def test_http_health_check_requires_url():
-    """An http probe without a url cannot run."""
-    data = _minimal_deployment()
-    data["spec"]["stages"] = [{"step": "a", "health_checks": [{"name": "api", "type": "http"}]}]
-    with pytest.raises(ValidationError, match="'url' is required"):
-        DeploymentModel.model_validate(data)
-
-
-def test_tcp_health_check_requires_host_and_port():
-    """A tcp probe needs both host and port."""
-    data = _minimal_deployment()
-    data["spec"]["stages"] = [{"step": "a", "health_checks": [{"name": "db", "type": "tcp", "host": "db"}]}]
-    with pytest.raises(ValidationError, match="'host' and 'port' are required"):
-        DeploymentModel.model_validate(data)
-
-
-def test_valid_health_checks_are_accepted():
-    """Well-formed http and tcp probes validate."""
+def test_removed_health_checks_are_refused_with_their_replacement():
+    """`health_checks` was removed in 2.9 (ADR-0068): the error writes the `verify.checks` entries to use."""
     data = _minimal_deployment()
     data["spec"]["stages"] = [
-        {
-            "step": "a",
-            "health_checks": [
-                {"name": "api", "type": "http", "url": "https://example.com/health", "expect_status": 204},
-                {"name": "db", "type": "tcp", "host": "db.internal", "port": 5432},
-            ],
-            "timeouts": {"apply": 1800},
-        }
+        {"step": "a", "health_checks": [{"name": "api", "type": "http", "url": "https://example.com/health"}]}
     ]
+    with pytest.raises(ValidationError, match="removed in strata 2.9") as error:
+        DeploymentModel.model_validate(data)
+    assert "checks: [{name: api, type: http, url: https://example.com/health}]" in str(error.value)
+
+
+def test_stage_timeouts_are_accepted():
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "a", "timeouts": {"apply": 1800}}]
     model = DeploymentModel.model_validate(data)
-    assert model.spec.stages[0].health_checks[0].expect_status == 204
     assert model.spec.stages[0].timeouts.apply == 1800
 
 
@@ -267,3 +251,63 @@ def test_deployment_rejects_unported_v1_fields():
         data["spec"][field] = []
         with pytest.raises(ValidationError):
             DeploymentModel.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
+# stages[].verify (docs/design/post-deploy-verification.md, D2, D5)
+# ---------------------------------------------------------------------------
+
+
+def _stage_with_verify(verify: dict) -> dict:
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "apply_web", "verify": verify}]
+    return data
+
+
+def test_a_verify_block_defaults_to_about_five_minutes_of_waiting():
+    model = DeploymentModel.model_validate(_stage_with_verify({"checks": [{"name": "web", "run": ["check"]}]}))
+    block = model.spec.stages[0].verify
+    assert (block.initial_delay, block.period, block.timeout, block.success_threshold, block.failure_threshold) == (
+        10,
+        10,
+        30,
+        1,
+        30,
+    )
+    assert (block.enabled, block.enforcement, block.on_unknown) == (True, "deny", "block")
+    [check] = block.checks
+    assert (check.type, check.exit_codes, check.failure_threshold) == ("script", "binary", None)
+
+
+@pytest.mark.parametrize(
+    ("verify", "match"),
+    [
+        ({"checks": []}, "checks"),
+        ({"checks": [{"name": "web", "run": []}]}, "run"),
+        ({"checks": [{"name": "web", "run": [" "]}]}, "executable"),
+        ({"checks": [{"name": "web", "run": ["check"], "exit_codes": "nagios"}]}, "exit_codes"),
+        ({"checks": [{"name": "web", "run": ["check"], "type": "http"}]}, "type"),
+        ({"enforcement": "block", "checks": [{"name": "web", "run": ["check"]}]}, "enforcement"),
+        ({"period": 0, "checks": [{"name": "web", "run": ["check"]}]}, "period"),
+        ({"checks": [{"name": "web", "run": ["a"]}, {"name": "web", "run": ["b"]}]}, "web"),
+    ],
+)
+def test_a_verify_block_rejects(verify, match):
+    with pytest.raises(ValidationError, match=match):
+        DeploymentModel.model_validate(_stage_with_verify(verify))
+
+
+def test_a_stage_takes_a_verify_timeout():
+    data = _minimal_deployment()
+    data["spec"]["stages"] = [{"step": "apply_web", "timeouts": {"verify": 600}}]
+    assert DeploymentModel.model_validate(data).spec.stages[0].timeouts.verify == 600
+
+
+def test_the_deployment_takes_its_own_verify_block():
+    """docs/design/post-deploy-verification.md, D2: `spec.verify`, run after every step."""
+    data = _minimal_deployment()
+    data["spec"]["verify"] = {
+        "checks": [{"name": "e2e", "run": ["check"]}, {"name": "old", "run": ["x"], "enabled": False}]
+    }
+    block = DeploymentModel.model_validate(data).spec.verify
+    assert [(check.name, check.enabled) for check in block.checks] == [("e2e", True), ("old", False)]

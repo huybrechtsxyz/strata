@@ -138,8 +138,10 @@ deployment's environment:
 | ---------------------- | ------------------------------------------------------------- |
 | `${deployment:name}`   | the deployment's `meta.name`                                  |
 | `${deployment:tenant}` | the deployment's `spec.tenant`, from the deployment or a base |
+| `${deployment:kube_context}` | the deployment's `spec.kube_context` |
+| `${deployment:docker_context}` | the deployment's `spec.docker_context` |
 
-`${deployment:tenant}` on a deployment that has no tenant is an error (`strata validate` reports it, and so does
+`${deployment:tenant}` on a deployment that has no tenant is an error (likewise a context it does not set) (`strata validate` reports it, and so does
 `deploy run`), not an empty string. Any other key, such as `${deployment:workspace}`, is rejected too. A
 `partial: true` base is not judged: only the deployment that extends it is.
 

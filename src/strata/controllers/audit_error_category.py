@@ -7,8 +7,10 @@ else is `unknown` rather than a guess. In order, the first that matches wins:
 
 1. a policy with `enforcement: deny` that did not pass (`policy_results`): the gates run before any step, so a denial
    is the cause;
-2. the code of an error, in run order (`_BY_CODE`);
-3. a marker in an error's text: strata's own "timed out and was killed" (`deploy_controller._failure_detail()`), and
+2. every error is a verify check's answer (`verify_check_failed`, `verify_check_unknown`): the steps were applied,
+   and the deployed workload does not work (`verification`, docs/design/post-deploy-verification.md, D9);
+3. the code of an error, in run order (`_BY_CODE`);
+4. a marker in an error's text: strata's own "timed out and was killed" (`deploy_controller._failure_detail()`), and
    Terraform's "Error acquiring the state lock".
 
 `quota`, `network` and `conflict` have no signal in a deploy yet: the clouds word them differently, inside tool
@@ -29,6 +31,10 @@ _BY_CODE: dict[str, ErrorCategory] = {
     "helm_registry_credentials_invalid": ErrorCategory.AUTH,
 }
 
+#: A verify check's answer as an error. Not `verify_outputs_unavailable` and the like: those say the checks could not
+#: be set up, which is the deploy's problem, not the workload's.
+_VERIFY_ANSWER_CODES = frozenset({"verify_check_failed", "verify_check_unknown"})
+
 _BY_MARKER: tuple[tuple[str, ErrorCategory], ...] = (
     ("timed out and was killed", ErrorCategory.TIMEOUT),
     ("Error acquiring the state lock", ErrorCategory.STATE_LOCK),
@@ -44,6 +50,8 @@ def error_category(
     if any(result.enforcement == "deny" and not result.passed for result in policy_results or ()):
         return ErrorCategory.POLICY
     errors = run_diagnostics.errors
+    if all(error.code in _VERIFY_ANSWER_CODES for error in errors):
+        return ErrorCategory.VERIFICATION
     for error in errors:
         if error.code in _BY_CODE:
             return _BY_CODE[error.code]

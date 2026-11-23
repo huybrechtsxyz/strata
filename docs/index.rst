@@ -30,6 +30,7 @@ strata-v2
    how-to/security-gates
    how-to/share-version-pins-across-workspaces
    how-to/structured-properties-with-attributeconfig
+   how-to/verify-a-deploy
 
 .. toctree::
    :maxdepth: 1

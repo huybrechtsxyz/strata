@@ -224,7 +224,8 @@ class InfraIntegration(Integration):
     #: (docs/design/deploy-command.md).
     TARGET_CONTEXT_FIELD: ClassVar[str | None] = None
 
-    def target_context_env(self, context: str) -> dict[str, str]:
+    @classmethod
+    def target_context_env(cls, context: str) -> dict[str, str]:
         """The environment that makes every call of this tool use `context`; empty when the tool is never pinned."""
         del context
         return {}

@@ -86,7 +86,8 @@ class ComposeIntegration(InfraIntegration):
     VERSION_ARGS = ("--version",)
     TARGET_CONTEXT_FIELD = "docker_context"
 
-    def target_context_env(self, context: str) -> dict[str, str]:
+    @classmethod
+    def target_context_env(cls, context: str) -> dict[str, str]:
         """Docker reads `DOCKER_CONTEXT` for every command, unless `DOCKER_HOST` is set (rejected before any step)."""
         return {DOCKER_CONTEXT_ENV: context}
 
@@ -337,7 +338,12 @@ class ComposeIntegration(InfraIntegration):
         line_callback: Callable[[str, str], None] | None = None,
         **kwargs: Any,
     ) -> CommandResult:
-        """`docker stack deploy [--with-registry-auth] -c path namespace`.
+        """`docker stack deploy --detach=false [--with-registry-auth] -c path namespace`.
+
+        `--detach=false` makes a successful deploy mean the services have converged (their tasks are running, and
+        healthy where the service has a healthcheck), not only that the stack was submitted, as `destroy()` waits
+        for removal (docs/design/post-deploy-verification.md, D11). A service that never converges keeps the
+        command waiting until the apply timeout stops it.
 
         Raises:
             IntegrationError: `namespace` was not given. Keyword-only with a
@@ -346,7 +352,7 @@ class ComposeIntegration(InfraIntegration):
         """
         if namespace is None:
             raise IntegrationError(f"{self.name}: 'namespace' is required to deploy a stack.")
-        args = ["stack", "deploy"]
+        args = ["stack", "deploy", "--detach=false"]
         if with_registry_auth:
             args.append("--with-registry-auth")
         args.extend(["-c", str(path), namespace])

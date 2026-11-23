@@ -351,7 +351,10 @@ differing only in `TYPE`:
 - `health` — **not implemented.** The one step needing an ArgoCD/Flux API
   client; deliberately deferred (no real-consumer shape to ground a design
   against, and it's read-only status reporting, never load-bearing for the
-  deploy itself).
+  deploy itself). Post-deploy verification covers it with a script check
+  that waits for the controller to apply the pushed `commit_sha`
+  ([verify-a-deploy.md](../how-to/verify-a-deploy.md), section 10); a
+  built-in check is an open question there.
 
 `COMMAND = "git"` — a correction found while implementing:
 `Integration.is_available()` treats a `None` command as unavailable, so

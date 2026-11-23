@@ -77,3 +77,22 @@ def test_a_code_wins_over_a_marker_in_a_later_error():
 
 def test_anything_else_is_unknown_never_a_guess():
     assert error_category(_failed("Step 'infra': deploy failed — quota exceeded"), None) is ErrorCategory.UNKNOWN
+
+
+@pytest.mark.parametrize("code", ["verify_check_failed", "verify_check_unknown"])
+def test_a_run_failed_only_by_verify_checks_is_a_verification_failure(code):
+    """docs/design/post-deploy-verification.md, D9: every step applied, the workload does not work."""
+    assert (
+        error_category(_failed("Step 'web': verify check 'up' failed.", code=code), None) is ErrorCategory.VERIFICATION
+    )
+
+
+def test_a_check_failure_next_to_another_error_is_not_only_a_verification_failure():
+    diagnostics = _failed("Step 'web': verify check 'up' failed.", code="verify_check_failed")
+    diagnostics.error("Step 'db': deploy failed — timed out and was killed after 600s")
+    assert error_category(diagnostics, None) is ErrorCategory.TIMEOUT
+
+
+def test_a_check_that_could_not_be_set_up_is_not_a_verification_failure():
+    """`verify_outputs_unavailable` is the deploy's problem (no output store), not the workload's."""
+    assert error_category(_failed("no outputs", code="verify_outputs_unavailable"), None) is ErrorCategory.UNKNOWN

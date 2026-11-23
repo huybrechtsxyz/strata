@@ -8,6 +8,89 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **Post-deploy verification: `stages[].verify`.** Checks run right after a step is applied, by `deploy run` and
+  `deploy apply`, and fail the run when the deployed workload does not work: a web app that never starts because
+  of missing configuration no longer ends in `success`.
+  - A check runs a command (`run`, an argument list, tokens resolved) and reads its exit code: 0 passes and anything
+    else fails (`exit_codes: binary`), or the Nagios/Icinga plugin codes (`exit_codes: monitoring`).
+  - It waits like a Kubernetes probe: `initial_delay`, `period`, `timeout`, `success_threshold`,
+    `failure_threshold`; by default about five minutes for the workload to come up. A check whose answer keeps
+    flipping fails after `failure_threshold + success_threshold - 1` attempts instead of running forever.
+  - A failure fails the stage with `enforcement: deny` (default) or warns with `warn`; a check that cannot answer
+    follows `on_unknown`. New findings `verify_check_failed`, `verify_check_unknown`, `verify_check_warning`.
+  - The audit manifest records a `verify` phase and each check's answer in `stages[].checks`. `--no-verify` skips
+    the checks for one run; `timeouts.verify` bounds the phase. See
+    [Verifying a deploy](../docs/config/deployment.md#verifying-a-deploy).
+  - `strata validate` checks a verify check's tokens: `${output:STEP.KEY}` must name the stage's own step or one
+    it depends on (`verify_output_unavailable` otherwise), and undeclared or malformed tokens are reported as in
+    any other field.
+  - **`spec.verify`**: checks for the deployment as a whole, run once after every step succeeded; skipped with a
+    note when `--stage`/`--scope` selects only some steps. Its checks may read any step's outputs. The manifest
+    records their answers in a top-level `checks`, and `verified`: whether every check that ran passed, left out
+    when none ran.
+  - **`strata deploy verify DEPLOYMENT`**: runs the checks against what is deployed now and changes nothing. It
+    takes `--stage`/`--scope`, skips the initial delays, reads `${output:}` from the workspace's `output_store`,
+    and exits 3 when a check fails. `--output json` lists every answer.
+  - `verify.checks` merge by `name` through `extends`, and `enabled: false` on a check turns one off: a base can
+    declare the checks every deployment shares. A child writes only what it changes (`{name: web, enabled: false}`
+    or `{name: web, timeout: 60}`), and `strata validate` does not judge a disabled check's tokens or files. `deploy plan`, `--dry-run` and `--smoke-test` name the checks a
+    real run would run. Decisions: [ADR-0066](../docs/decisions/0066-post-deploy-verification-is-a-deploy-phase.md)
+    and [ADR-0067](../docs/decisions/0067-verify-checks-use-the-gates-semantics.md).
+  - **Checks after a destroy**: `when: [destroy]` (or `[apply, destroy]`) on a check runs it after `deploy destroy
+    --force` destroyed its step (`STRATA_ACTION=destroy`), to confirm what was removed is gone; a failure makes the
+    destroy `partial`. Their `${output:}` comes from the output store, read before anything is destroyed; a record
+    that is missing or stale makes the check unknown, and never stops the destroy before it starts.
+    `deploy destroy` takes `--no-verify`; `deploy verify` runs only the `apply` checks.
+  - **Built-in `http` and `tcp` checks**: `type: http` (`url`, `method`, `headers`, `expect_status`) passes on the
+    expected status, or on an `application/health+json` body's `status` (`pass`, `warn`, `fail`); `type: tcp`
+    (`host`, `port`) passes when the connection opens. `expect: down` turns either around, for a destroy check.
+    An `http` check takes `method: POST` with a `body`, `ca_file` to trust a private CA or a self-signed
+    certificate, or `insecure: true` to skip the certificate check; an untrusted certificate fails with a message
+    saying so.
+  - **`type: helm`** runs a chart's own tests (`helm test`, `release`, `namespace`, `tests`) once after the step,
+    against the deployment's `kube_context`. Every `script` and `helm` check gets the deployment's contexts:
+    `HELM_KUBECONTEXT` and `STRATA_KUBE_CONTEXT`, `DOCKER_CONTEXT` and `STRATA_DOCKER_CONTEXT`. The how-to shows a
+    script check that waits for Flux or Argo CD to apply the pushed commit.
+  - **`${deployment:kube_context}` and `${deployment:docker_context}`**: the deployment's contexts as tokens, so a
+    check's `run` can pass them to `kubectl` or `docker` (`run` is never passed through a shell). Like
+    `${deployment:tenant}`, one the deployment does not set is an error.
+  - `strata validate` reports a check file of the solution that is missing: the script a `script` check runs
+    (`verify_script_missing`: `run[0]`, or the script `pwsh -File`, `python`, `bash` and the like run), and an
+    `http` check's `ca_file` that does not exist or holds no certificate (`verify_ca_file_unusable`). Before, the
+    check could not answer, and the run stopped after the step was applied. Absolute paths and bare commands are
+    left to the machine that deploys.
+  - The design is in [post-deploy-verification.md](../docs/design/post-deploy-verification.md).
+  - **Recorded beyond the manifest**: the metrics count the checks (`checks_total`, `checks_failed`) and name the
+    result in a new label-safe dimension, `verification` (`verified`, `verification_failed`, `not_verified`); the
+    events carry it as `labels.verification`, and the handover document says it. A run that failed only because of
+    its checks has the new `error_category: verification`.
+
+### Changed
+
+- A Compose step now waits for its services to converge (`docker stack deploy --detach=false`), as its destroy
+  already waited for removal: a stack whose services never start fails the step when `timeouts.apply` runs out,
+  instead of succeeding as soon as it was submitted.
+
+### Removed
+
+**Breaking, in a minor release ([ADR-0068](../docs/decisions/0068-remove-health-checks-in-2-9.md)):** change these
+before upgrading.
+
+- **`stages[].health_checks`**, which was accepted but never ran. A deployment that still declares it fails to load;
+  the message writes the `verify.checks` entries (`type: http` or `type: tcp`) that replace its probes, so they run.
+
+### Fixed
+
+- Through `extends`, a child deployment no longer resets what its base set with defaults it never wrote. A child
+  that set one field of `locking` (`wait_timeout`) turned the base's `locking.enabled: true` back to `false` and its
+  `strategy` back to `delegate`; a child that tuned a stage (its `timeouts`) re-enabled a stage the base had turned
+  off (`enabled: false`) and reset its `on_failure`. Each document of a chain is now merged as written, for
+  deployments, environments and tenants alike. Neither field was acted on yet, so no deploy ran differently.
+- A hint on a finding from `strata validate` (such as `base_unused`, `document_unreferenced` or the
+  `version_*` findings) could be lost when the finding was attributed to its file; it is now always shown.
+
 ## [2.8.0] - 2026-11-20
 
 The audit record names the commits that were built, not the checkouts as they are at deploy time. An audit sink can

@@ -50,7 +50,16 @@ _REPORT_KEY_PREFIX = "strata/deployment-report/"
 _AUDIT_KEY_PREFIX = "strata/deployment-audit/"
 
 #: The audit summary's fields: always all present (`None` when unknown), so a template can use any of them.
-AUDIT_SUMMARY_KEYS = ("deployed_by", "completed_at", "status", "action", "version", "execution_id", "commit_sha")
+AUDIT_SUMMARY_KEYS = (
+    "deployed_by",
+    "completed_at",
+    "status",
+    "action",
+    "version",
+    "execution_id",
+    "commit_sha",
+    "verification",
+)
 
 #: Above the backend's limit, descriptions are first shortened to this many characters.
 SHORT_DESCRIPTION_LENGTH = 200

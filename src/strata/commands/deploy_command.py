@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`strata deploy run`/`setup`/`check`/`plan`/`apply`/`destroy` — execute (or partially execute) a
+"""`strata deploy run`/`setup`/`check`/`plan`/`apply`/`destroy`/`verify` — execute (or partially execute) a
 deployment's workspace provisioners (Terraform plan/apply, the Compose/Helm
 equivalents) against `build run`'s already-rendered output
 (docs/design/deploy-command.md, docs/design/deploy-pipeline-stage-commands.md,
@@ -31,10 +31,11 @@ from strata.commands.deploy_list_command import deploy_list_command
 from strata.commands.deploy_output_command import deploy_output_command
 from strata.commands.deploy_report_command import deploy_report_command
 from strata.commands.deploy_steps_command import deploy_steps_command
+from strata.commands.json_output import JsonReporter
 from strata.commands.options import output_option, pin_callback, quiet_option, resolve_work_path, verbose_option
 from strata.commands.run import command_run
 from strata.controllers.audit_run import finalize_and_distribute_deploy_audit
-from strata.controllers.deploy_controller import deploy_run
+from strata.controllers.deploy_controller import deploy_run, deploy_verify
 from strata.controllers.deploy_stage_log import StageLog
 from strata.controllers.integration_readiness import IntegrationReadiness
 from strata.controllers.solution_context import open_solution
@@ -305,6 +306,17 @@ def _validate_change_reference_flags(
         )
 
 
+#: `deploy run`/`apply`/`destroy`: skip every `verify` check for this run (docs/design/post-deploy-verification.md, D3).
+_no_verify_option = click.option(
+    "--no-verify",
+    "no_verify",
+    is_flag=True,
+    default=False,
+    help="Skip the 'verify' checks, which otherwise run after each step is applied (or destroyed) and fail the run "
+    "when the deployed workload does not work (or is not gone). For a pipeline that verifies in a later stage.",
+)
+
+
 @deploy_command.command("run")
 @click.argument("deployment")
 @click.option(
@@ -389,6 +401,7 @@ def _validate_change_reference_flags(
     "failure, never a silent stale read. Omit to use the workspace setting (itself optional, "
     "no staleness enforcement by default).",
 )
+@_no_verify_option
 @_change_reference_options
 @output_option
 @quiet_option
@@ -405,6 +418,7 @@ def deploy_run_command(
     scope: tuple[str, ...],
     pin: VersionPins,
     output_max_age: int | None,
+    no_verify: bool,
     change_system: str | None,
     change_id: str | None,
     change_reason: str | None,
@@ -425,7 +439,8 @@ def deploy_run_command(
       2  bad arguments, DEPLOYMENT does not exist, --pin names an unknown
          version document, or not inside a solution
       3  a declared value failed to resolve, a filtered step's tool is not
-         available on PATH, or a step's plan/deploy failed
+         available on PATH, a step's plan/deploy failed, or a stage's verify
+         check failed after its step was applied
 
     Run 'strata build run DEPLOYMENT' first — this never renders anything,
     only executes what is already on disk at --build-path.
@@ -492,6 +507,7 @@ def deploy_run_command(
             output_max_age=output_max_age,
             on_tool=on_tool,
             stage_log=stage_log,
+            verify=not no_verify,
         )
 
         # Audit trail — finalize + write locally + distribute (docs/design/
@@ -519,6 +535,8 @@ def deploy_run_command(
             change_approved_at=change_approved_at,
             providers=list(providers.values()),
             stages=stage_log.stages(diagnostics),
+            checks=stage_log.deployment_checks(),
+            verified=stage_log.verified(),
         )
         diagnostics.extend(audit_diagnostics)
 
@@ -717,6 +735,7 @@ deploy_command.add_command(_deploy_validate_command)
     "neither of which v2 has built yet. Accepted for CLI parity with real invocations, which "
     "always pass it; applying a saved plan file never needs '-auto-approve' regardless.",
 )
+@_no_verify_option
 @_change_reference_options
 @output_option
 @quiet_option
@@ -731,6 +750,7 @@ def deploy_apply_command(
     scope: tuple[str, ...],
     pin: VersionPins,
     output_max_age: int | None,
+    no_verify: bool,
     change_system: str | None,
     change_id: str | None,
     change_reason: str | None,
@@ -751,8 +771,8 @@ def deploy_apply_command(
       2  bad arguments, DEPLOYMENT does not exist, --pin names an unknown
          version document, or not inside a solution
       3  a declared value failed to resolve, a filtered step's tool is not
-         available on PATH, no saved plan exists for a filtered step, or a
-         step's apply failed
+         available on PATH, no saved plan exists for a filtered step, a
+         step's apply failed, or a stage's verify check failed after it
 
     Never recomputes a plan — run 'strata deploy plan DEPLOYMENT' first.
     Applies exactly the '<step>.tfplan' that command saved, the same
@@ -807,6 +827,7 @@ def deploy_apply_command(
             output_max_age=output_max_age,
             on_tool=on_tool,
             stage_log=stage_log,
+            verify=not no_verify,
         )
 
         # Audit trail — same as `deploy run` (docs/design/audit-trail.md):
@@ -834,6 +855,8 @@ def deploy_apply_command(
             change_approved_at=change_approved_at,
             providers=list(providers.values()),
             stages=stage_log.stages(diagnostics),
+            checks=stage_log.deployment_checks(),
+            verified=stage_log.verified(),
         )
         diagnostics.extend(audit_diagnostics)
 
@@ -866,6 +889,7 @@ def deploy_apply_command(
     help="Report which steps would be destroyed, last first, without calling any tool or reading the output "
     "store. Values must still resolve. Exactly one of --force, --dry-run or --smoke-test is required.",
 )
+@_no_verify_option
 @_change_reference_options
 @output_option
 @quiet_option
@@ -877,6 +901,7 @@ def deploy_destroy_command(
     force: bool,
     dry_run: bool,
     smoke_test: bool,
+    no_verify: bool,
     follow: str | None,
     stage: tuple[str, ...],
     scope: tuple[str, ...],
@@ -904,14 +929,16 @@ def deploy_destroy_command(
          or not inside a solution
       3  a declared value failed to resolve, a filtered step's tool is not
          available on PATH, a step cannot be destroyed (a script step without
-         'destroy_args', or a '${output:}' it needs has no usable record), or
-         a destroy failed
+         'destroy_args', or a '${output:}' it needs has no usable record), a
+         destroy failed, or a 'verify' check with 'when: [destroy]' failed
 
     Steps are destroyed in reverse dependency order. Use --stage/--scope to
     destroy part of a deployment; steps that depend on what is destroyed are
     reported, never blocked. The image tag policy and the security gates do not
     run. Run 'strata build run DEPLOYMENT' first, and preview with --dry-run.
-    A successful destroy clears the deployment's stored step outputs.
+    A stage's 'verify' checks with 'when: [destroy]' run after its step is
+    destroyed, to confirm it is gone; --no-verify skips them. A successful
+    destroy clears the deployment's stored step outputs.
     """
     # --dry-run previews, so it streams by default, like 'deploy plan'.
     if dry_run and follow is None:
@@ -963,6 +990,7 @@ def deploy_destroy_command(
             force=force,
             dry_run=dry_run,
             smoke_test=smoke_test,
+            verify=not no_verify,
             stages=stage,
             scopes=scope,
             on_step=on_step,
@@ -995,6 +1023,8 @@ def deploy_destroy_command(
                 change_approved_at=change_approved_at,
                 providers=list(providers.values()),
                 stages=stage_log.stages(diagnostics),
+                checks=stage_log.deployment_checks(),
+                verified=stage_log.verified(),
             )
             diagnostics.extend(audit_diagnostics)
 
@@ -1057,3 +1087,102 @@ def deploy_plan_command(
         quiet=quiet,
         verbose=verbose,
     )
+
+
+@deploy_command.command("verify")
+@click.argument("deployment")
+@click.option(
+    "--path",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Where to start looking for the solution. Defaults to the current directory.",
+)
+@click.option(
+    "--follow",
+    "-f",
+    is_flag=False,
+    flag_value="console",
+    default=None,
+    type=click.Choice(["console", "ndjson"]),
+    help="Stream what the checks print, live. Bare --follow streams console text (to stderr under --output "
+    "json); --follow ndjson streams JSON events to stdout instead and requires --output json.",
+)
+@click.option("--stage", multiple=True, metavar="NAME", help=_STAGE_HELP)
+@click.option("--scope", multiple=True, metavar="LABEL", help=_SCOPE_HELP)
+@click.option(
+    "--pin",
+    multiple=True,
+    callback=pin_callback,
+    metavar="VERSION",
+    help="Override spec.version with these kind: version documents for this invocation only (ADR-0019), as "
+    "'deploy run --pin' does: the version the ${artifact:} tokens in a check resolve against.",
+)
+@click.option(
+    "--output-max-age",
+    type=click.IntRange(min=1),
+    default=None,
+    metavar="SECONDS",
+    help="Trust window for the recorded step outputs a check reads (${output:STEP.KEY}), overriding the "
+    "workspace's 'output_store_max_age' for this invocation only. An older record is an error.",
+)
+@output_option
+@quiet_option
+@verbose_option
+def deploy_verify_command(
+    deployment: str,
+    path: Path | None,
+    follow: str | None,
+    stage: tuple[str, ...],
+    scope: tuple[str, ...],
+    pin: VersionPins,
+    output_max_age: int | None,
+    output: str,
+    quiet: bool,
+    verbose: bool,
+) -> None:
+    """Run DEPLOYMENT's verify checks against what is deployed now, changing nothing.
+
+    \b
+    Exit codes:
+      0  no check failed (a check with enforcement: warn or on_unknown: warn
+         may still have reported a warning)
+      2  bad arguments, DEPLOYMENT does not exist, or not inside a solution
+      3  a check failed or could not answer, and its block makes that an
+         error; or a value or a recorded output a check needs is unusable
+
+    Runs every selected stage's 'verify' block, then the deployment's own
+    'spec.verify' (only when no --stage/--scope leaves a step out). The
+    initial delays are not waited, the retries are. The checks' outputs
+    (${output:STEP.KEY}) come from the workspace's output_store. Writes no
+    audit manifest: nothing changed (docs/design/post-deploy-verification.md).
+    """
+    with command_run("deploy verify", output=output, quiet=quiet, verbose=verbose, compact=(follow == "ndjson")) as run:
+        if follow == "ndjson" and output != "json":
+            raise UsageError("--follow ndjson requires --output json.")
+
+        context = open_solution(resolve_work_path(path)).require_valid()
+        solution = context.controller.solution
+        run.describe(
+            solution=solution.meta.name if solution else "(unnamed)",
+            root=context.root,
+            deployment=deployment,
+        )
+        on_step, on_line = _line_follow_callbacks(follow, output, run.step)
+
+        diagnostics, report = deploy_verify(
+            context,
+            deployment,
+            stages=stage,
+            scopes=scope,
+            on_step=on_step,
+            on_line=on_line,
+            pin=pin,
+            output_max_age=output_max_age,
+        )
+        if report.verified is not None:
+            on_step(f"verified: {'yes' if report.verified else 'no'}")
+
+        run.report(diagnostics, root=context.root)
+        if isinstance(run.reporter, JsonReporter):
+            run.reporter.data = report.to_dict()
+        run.ok = diagnostics.ok
