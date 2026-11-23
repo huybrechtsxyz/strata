@@ -13,8 +13,8 @@ logging, cost/drift tracking are not ported (only added when a v2 feature actual
   - `event_overrides` — switch event types on or off;
   - `sinks[]` — send the audit record to a git repository or an integration. A git sink names a `remote`, the
     `branch` to push to, a folder `path`, and an `action` (`push`, the default; `commit`; `none`; see below). It
-    receives `_manifest.json`, `_metrics.json` when it admits `deployment.measured`, the build's `sbom.json` when
-    the manifest references one, and `_handover.md` when a deploy wrote it;
+    receives `_manifest.json`, `_metrics.json` when it admits `deployment.measured`, the build's `resolved.yaml`
+    and `sbom.json`, and `_handover.md` when a deploy wrote it;
   - `require_remote_commits` — fail `deploy run` when the build does not record a clean commit for every
     repository it took files from (default `false`; see below)
 

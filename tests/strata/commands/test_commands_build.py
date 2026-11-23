@@ -333,8 +333,10 @@ def test_env_file_supplies_an_environment_store_variable(runner, solution, monke
     result = _run(runner, "app", "--path", solution, "--env-file", env_file)
 
     assert result.exit_code == EXIT_SUCCESS, result.output
-    manifest = (solution / "build" / "app" / "resolved.yaml").read_text()
-    assert "hello-from-cli-test" in manifest
+    # Terraform gets the value; resolved.yaml, which a git audit sink keeps, never does.
+    tfvars = next((solution / "build" / "app").rglob("strata.auto.tfvars.json")).read_text()
+    assert "hello-from-cli-test" in tfvars
+    assert "hello-from-cli-test" not in (solution / "build" / "app" / "resolved.yaml").read_text()
 
 
 # ---------------------------------------------------------------------------

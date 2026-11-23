@@ -15,6 +15,12 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
   the very file it hashed next to `_manifest.json` in `.strata/audit/`, and every git sink pushes it with the
   manifest. No setting; a build without an SBOM pushes none. Integration sinks are unchanged: they send events,
   not files. See [the audit trail](../docs/design/audit-trail.md#the-git-sink).
+- **A git audit sink keeps `resolved.yaml` too, and the file no longer holds values from the environment.** A
+  variable or feature with `store: environment` is now listed in `resolved.yaml` without its value: the value came
+  from the build's environment, where a pipeline's secrets also sit. Terraform still gets it through
+  `strata.auto.tfvars.json`. The deploy copies `resolved.yaml` next to the manifest and every git sink pushes it.
+  A build folder from an older strata that still holds such values is not copied; the run warns
+  `audit_resolved_not_kept` and the manifest still references the file by hash.
 
 ## [2.9.0] - 2026-11-23
 

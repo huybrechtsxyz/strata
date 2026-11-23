@@ -2329,8 +2329,41 @@ def test_build_run_env_file_supplies_a_missing_environment_store_variable(tmp_pa
 
     build_run(_context(root), "app", build_path, env_files=[env_file])
 
+    assert _tfvars_variables(build_path)["GREETING"] == "hello-from-file"
+    # resolved.yaml says where the value comes from, never the value: a git audit sink keeps that file.
     manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
-    assert manifest["variables"]["GREETING"] == {"store": "environment", "value": "hello-from-file"}
+    assert manifest["variables"]["GREETING"] == {"store": "environment"}
+
+
+def _tfvars_variables(build_path: Path) -> dict:
+    """The `variables` Terraform gets: `strata.auto.tfvars.json`, the one place an environment-store value goes."""
+    return json.loads(next(build_path.rglob("strata.auto.tfvars.json")).read_text())["strata"]["variables"]
+
+
+@pytest.mark.slow
+def test_resolved_yaml_leaves_out_every_value_read_from_the_environment(tmp_path: Path, monkeypatch):
+    """A pipeline secret declared as a variable by mistake must not reach an audit repository."""
+    monkeypatch.setenv("PROBE_TOKEN", "s3cr3t-from-the-pipeline")
+    monkeypatch.setenv("PROBE_FLAG", "true")
+    root = _solution_with_values(
+        tmp_path,
+        extra_environment_spec=(
+            "  variables:\n    - key: API_TOKEN\n      store: environment\n      value: PROBE_TOKEN\n"
+            "    - key: REGION\n      store: constant\n      value: westeurope\n"
+            "  features:\n    - key: BETA\n      store: environment\n      value: PROBE_FLAG\n"
+        ),
+    )
+    build_path = tmp_path / "build"
+
+    build_run(_context(root), "app", build_path)
+
+    text = (build_path / "resolved.yaml").read_text()
+    assert "s3cr3t-from-the-pipeline" not in text
+    manifest = yaml.safe_load(text)
+    assert manifest["variables"]["API_TOKEN"] == {"store": "environment"}
+    assert manifest["features"]["BETA"] == {"store": "environment"}
+    assert manifest["variables"]["REGION"] == {"store": "constant", "value": "westeurope"}  # from a document
+    assert _tfvars_variables(build_path)["API_TOKEN"] == "s3cr3t-from-the-pipeline"  # Terraform still gets it
 
 
 @pytest.mark.slow
@@ -2348,8 +2381,7 @@ def test_build_run_env_file_never_overrides_a_real_env_var(tmp_path: Path, monke
 
     build_run(_context(root), "app", build_path, env_files=[env_file])
 
-    manifest = yaml.safe_load((build_path / "resolved.yaml").read_text())
-    assert manifest["variables"]["GREETING"]["value"] == "real-shell-value"
+    assert _tfvars_variables(build_path)["GREETING"] == "real-shell-value"
 
 
 # ---------------------------------------------------------------------------
