@@ -8,6 +8,14 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Changed
+
+- **A git audit sink keeps the SBOM.** The audit manifest recorded `sbom.json` only by hash, and the file stayed in
+  the build directory, which CI throws away, so the hash could not be checked later. A deploy or destroy now copies
+  the very file it hashed next to `_manifest.json` in `.strata/audit/`, and every git sink pushes it with the
+  manifest. No setting; a build without an SBOM pushes none. Integration sinks are unchanged: they send events,
+  not files. See [the audit trail](../docs/design/audit-trail.md#the-git-sink).
+
 ## [2.9.0] - 2026-11-23
 
 ### Added

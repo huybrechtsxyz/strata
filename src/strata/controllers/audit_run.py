@@ -15,7 +15,8 @@ today, so this is an honest adaptation, not a literal port.
 gap #18 Phase 1) the same way — re-hashed fresh here rather than threaded
 through from the earlier `build run` process, since the two are separate
 CLI invocations with no in-memory value to carry between them. Optional,
-unlike `artifacts.platform`: a missing SBOM raises no diagnostic.
+unlike `artifacts.platform`: a missing SBOM raises no diagnostic. Unlike `resolved.yaml`, the SBOM itself is
+also kept: copied into the run's audit folder and pushed with the manifest to every git sink.
 
 `action="destroy"` (docs/design/deploy-destroy.md) records a `deploy destroy` run the same way, with three
 differences: the manifest and metrics say `destroy`; the event admitted is `deployment.destroyed` instead of
@@ -231,6 +232,7 @@ def finalize_and_distribute_deploy_audit(
     )
 
     policy_results = None if action == "destroy" else read_policy_results(build_path)
+    sbom_reference, sbom_bytes = _sbom_reference(build_path, diagnostics)
 
     manifest = DeploymentManifestModel(
         execution_id=execution_id,
@@ -256,7 +258,7 @@ def finalize_and_distribute_deploy_audit(
             charts=charts,
             providers=list(providers) or None,
         ),
-        sbom=_sbom_reference(build_path, diagnostics),
+        sbom=sbom_reference,
         change_reference=change_reference,
         stages=list(stages) or None,
         checks=list(checks) or None,
@@ -303,6 +305,12 @@ def finalize_and_distribute_deploy_audit(
     metrics_path = local_dir / _METRICS_FILENAME
     manifest_path.write_text(manifest.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
     metrics_path.write_text(metrics.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
+    # The very bytes `manifest.sbom` hashed, under the name its `path` gives, so the reference resolves in the
+    # audit folder too.
+    sbom_path = None
+    if sbom_reference is not None:
+        sbom_path = local_dir / SBOM_FILENAME
+        sbom_path.write_bytes(sbom_bytes)
     if action == "deploy" and status == "success":
         _record_last_deploy(context, deployment, manifest, diagnostics)
     handover_path = (
@@ -349,6 +357,7 @@ def finalize_and_distribute_deploy_audit(
             diagnostics=diagnostics,
             git_sink_values=git_sink_values,
             handover_path=handover_path,
+            sbom_path=sbom_path,
         )
 
     return diagnostics
@@ -439,9 +448,11 @@ def _dispatch_sink(
     diagnostics: Diagnostics,
     git_sink_values: Mapping[str, str] | None,
     handover_path: Path | None = None,
+    sbom_path: Path | None = None,
 ) -> None:
     """Admission + dispatch for one sink — appends findings to `diagnostics` in place. A git sink also pushes
-    the handover document, when `spec.documentation` wrote one."""
+    the handover document, when `spec.documentation` wrote one, and the SBOM the manifest references, when it
+    references one."""
     if not sink.enabled:
         return
     sink_events = [t for t in admitted_types if sink.events is None or t in sink.events]
@@ -469,6 +480,8 @@ def _dispatch_sink(
         files[_METRICS_FILENAME] = metrics_path
     if handover_path is not None:
         files[HANDOVER_FILENAME] = handover_path
+    if sbom_path is not None:
+        files[SBOM_FILENAME] = sbom_path
 
     auth = _resolve_git_sink_auth(context, sink.git)
     result = push_audit_files(
@@ -797,11 +810,15 @@ def _platform_reference(build_path: Path) -> tuple[ManifestPlatformReferenceMode
     return ManifestPlatformReferenceModel(hash=f"sha256:{file_hash}", path="resolved.yaml"), diagnostics
 
 
-def _sbom_reference(build_path: Path, diagnostics: Diagnostics) -> ManifestSbomReferenceModel | None:
+def _sbom_reference(build_path: Path, diagnostics: Diagnostics) -> tuple[ManifestSbomReferenceModel | None, bytes]:
     """Hash + reference `build_path/sbom.json`, re-derived fresh at deploy
     time — same reasoning as `_platform_reference()` (build and deploy are
     separate CLI invocations; there is no in-memory value to carry between
     them, only what `write_sbom()` already wrote to disk earlier).
+
+    Also returns the bytes it hashed (empty when there is no reference), so the run's audit folder keeps a copy
+    of exactly the file the manifest vouches for: the build directory is thrown away on CI, and a git sink pushes
+    the copy next to the manifest (docs/design/audit-trail.md, "The git sink").
 
     Unlike `_platform_reference()`, a missing SBOM is not an error and
     raises no diagnostic — SBOM generation is itself optional (a workspace
@@ -815,7 +832,7 @@ def _sbom_reference(build_path: Path, diagnostics: Diagnostics) -> ManifestSbomR
     """
     sbom_path = build_path / SBOM_FILENAME
     if not sbom_path.exists():
-        return None
+        return None, b""
     try:
         sbom_bytes = sbom_path.read_bytes()
     except OSError as exc:
@@ -823,7 +840,7 @@ def _sbom_reference(build_path: Path, diagnostics: Diagnostics) -> ManifestSbomR
             f"'{sbom_path}' cannot be read ({exc}), so the audit manifest records no SBOM for this run.",
             code="audit_sbom_unreadable",
         )
-        return None
+        return None, b""
     try:
         component_count: int | None = len(parse_sbom(sbom_bytes, sbom_path)["components"])
     except ValueError as exc:
@@ -832,12 +849,13 @@ def _sbom_reference(build_path: Path, diagnostics: Diagnostics) -> ManifestSbomR
             code="audit_sbom_unreadable",
         )
         component_count = None
-    return ManifestSbomReferenceModel(
+    reference = ManifestSbomReferenceModel(
         path=SBOM_FILENAME,
         format=SBOM_FORMAT,
         sha256=f"sha256:{hashlib.sha256(sbom_bytes).hexdigest()}",
         component_count=component_count,
     )
+    return reference, sbom_bytes
 
 
 def _build_change_reference(

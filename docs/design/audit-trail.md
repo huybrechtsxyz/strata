@@ -1,20 +1,21 @@
 # Audit Trail — Design
 
 - Status: current
-- Last updated: 2026-11-19
+- Last updated: 2026-11-23
 
 ## Overview
 
 Every real `deploy run`, `deploy apply` and `deploy destroy` leaves a record of what it did: a deployment manifest
-(`_manifest.json`) and a metrics record (`_metrics.json`). Both are written once, locally, at the end of the run,
-then sent to every configured audit sink: a git repository, where they are kept, or an integration (a webhook, OTel
-or Sentinel), which receives a CloudEvent rendered from them. A dry run and a smoke test write nothing.
+(`_manifest.json`) and a metrics record (`_metrics.json`), with a copy of the build's SBOM (`sbom.json`) when the
+build wrote one. They are written once, locally, at the end of the run, then sent to every configured audit sink: a
+git repository, where they are kept, or an integration (a webhook, OTel or Sentinel), which receives a CloudEvent
+rendered from the manifest or the metrics. A dry run and a smoke test write nothing.
 
 The record answers the questions a change auditor asks (NIS2, ISO 27001 A.12.1.2 and A.12.4, ISAE 3402 Type II):
 
 | Question                     | Answered by                                                                                          |
 | ---------------------------- | ---------------------------------------------------------------------------------------------------- |
-| What changed                 | `artifacts`: the build's `resolved.yaml` by hash, each repository's commit, images, charts, providers; the SBOM by hash |
+| What changed                 | `artifacts`: the build's `resolved.yaml` by hash, each repository's commit, images, charts, providers; the SBOM by hash, kept next to the manifest |
 | Why                          | `change_reference`, from the `--change-*` flags                                                      |
 | Who approved                 | `change_reference.approved_by`/`approved_at` (stated by the operator, not checked against a tracker) |
 | Who ran it, and how it went  | `deployed_by`, `pipeline` (the CI run and its log), `status`, timings, findings, `policy_results`    |
@@ -59,7 +60,7 @@ lists a type the overrides switched off, is a validation error. The set grows on
 
 ### The audit files
 
-Both files sit in one directory per run and share an `execution_id`.
+Both files sit in one directory per run and share an `execution_id`. The SBOM copy sits next to them.
 
 **`_manifest.json`** ([audit_manifest_model.py](../../src/strata/models/audit_manifest_model.py)) is the full
 record:
@@ -79,7 +80,13 @@ record:
 - `sbom` (path, format, sha256, component count), `change_reference` and `policy_results`.
 
 Satellite files are referenced by path and hash, never embedded: the manifest stays small and vouches for each file
-without copying it.
+without copying it into itself.
+
+**`sbom.json`** is the one satellite kept beside the manifest. The run copies the very bytes it hashed into the
+run's directory, under the name `sbom.path` gives, so the reference resolves there as well as in the build directory,
+which CI throws away. A corrupt SBOM is copied as it was (the manifest hashes it without a component count); one
+that cannot be read is neither referenced nor copied. A destroy copies it too: it lists what the destroyed deployment
+ran. `resolved.yaml` stays a reference only.
 
 **`_metrics.json`** ([audit_metrics_model.py](../../src/strata/models/audit_metrics_model.py)) is the lean sibling,
 meant to be shipped to dashboards and SIEMs more freely:
@@ -183,7 +190,7 @@ log records the attempt; a denied `deploy run` writes a `failed` manifest with t
 `deploy_run()` returns, whatever it returned:
 
 1. `execution_id` and `started_at` were fixed at the top of the run.
-2. The manifest and metrics are completed and written once to `.strata/audit/<relative path>/`.
+2. The manifest and metrics are completed and written once to `.strata/audit/<relative path>/`, with the SBOM copy.
 3. One loop over the sinks sends them: a git sink copies the files and pushes, an integration sink sends a rendered
    event per admitted type.
 
@@ -236,7 +243,17 @@ spec:
 ### The git sink
 
 The files are copied to `<path>/<relative path>/` in the repository, committed and pushed
-([audit_push.py](../../src/strata/controllers/audit_push.py)).
+([audit_push.py](../../src/strata/controllers/audit_push.py)):
+
+| File             | Pushed when                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| `_manifest.json` | the sink admits any event of the run                                                           |
+| `_metrics.json`  | the sink admits `deployment.measured`                                                          |
+| `sbom.json`      | the manifest references an SBOM, whatever the sink's events                                    |
+| `_handover.md`   | a successful deploy wrote it ([deployment-documentation.md](deployment-documentation.md))      |
+
+Git stores identical content once, so redeploying the same build adds almost nothing for its SBOM. An integration
+sink receives events, never files.
 
 - **A `reference` remote:** strata keeps its own clone under `.strata/audit-push/<remote>/<branch>`, keyed by branch
   rather than ref because a push target is a moving tip. It fetches and resets before every write, and pushes
@@ -321,6 +338,10 @@ in the pull request; nothing copies them into the manifest.
   send a fresh CloudEvents `id`, which a stored copy could not.
 - `artifacts.platform` is a reference, not an embed. v1 embedded the platform content but referenced the SBOM and
   outputs, without saying why; one rule for all satellites keeps the manifest small.
+- That rule was first read as "push only the manifest", so the SBOM's hash pointed at a file in the build directory,
+  which CI throws away, and nobody could check it later. Since 2026-11-23 the run copies `sbom.json` next to the
+  manifest and every git sink pushes it. The rule still holds for the manifest's content: the SBOM is a file beside
+  it, not embedded in it. There is no setting; a sink that keeps the manifest keeps what it vouches for.
 - `path`, `structure` and `journal` were removed from the configuration rather than defaulted. A templated
   `structure` would have been a second way to describe a shape `layers.segments` already declares.
 - The timestamp leaf is mandatory because two of v1's built-in structures had none, so every run silently
