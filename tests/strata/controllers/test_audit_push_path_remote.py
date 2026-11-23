@@ -102,10 +102,15 @@ def _files(tmp_path: Path, text: str = '{"execution_id": "1"}') -> dict[str, Pat
     return {"_manifest.json": source}
 
 
-def _push(tmp_path: Path, action: str = "push", *, run: str = "run1", text: str = '{"execution_id": "1"}'):
-    return push_audit_files(
-        tmp_path / "solution", _sink(action), _solution(), _files(tmp_path, text), Path(run), "ci-runner"
-    )
+def _push(
+    tmp_path: Path,
+    action: str = "push",
+    *,
+    run: str = "run1",
+    text: str = '{"execution_id": "1"}',
+    actor: str = "ci-runner",
+):
+    return push_audit_files(tmp_path / "solution", _sink(action), _solution(), _files(tmp_path, text), Path(run), actor)
 
 
 def _on_server(tmp_path: Path, bare: Path, relative: str) -> str | None:
@@ -301,6 +306,47 @@ def test_a_commit_an_earlier_run_could_not_push_is_pushed_by_the_next(tmp_path: 
     result = _push(tmp_path)
 
     assert result.success, result.detail
+    assert _on_server(tmp_path, bare, "deploys/run1/_manifest.json") == '{"execution_id": "1"}'
+
+
+@pytest.mark.parametrize(
+    ("actor", "email"),
+    [
+        ("First Last", "First.Last@strata-audit.local"),
+        ("first.last@example.com", "first.last.example.com@strata-audit.local"),
+    ],
+)
+def test_an_actor_with_a_space_or_an_email_still_pushes(tmp_path: Path, actor: str, email: str):
+    """Azure Pipelines' `BUILD_REQUESTEDFOR` is a display name ("First Last"). The commit is still strata's own, and
+    its author email is a valid address; the readable actor stays the author name."""
+    bare = _server(tmp_path)
+    checkout = _pipeline_checkout(tmp_path, bare)
+
+    result = _push(tmp_path, actor=actor)
+
+    assert result.success, result.detail
+    assert _on_server(tmp_path, bare, "deploys/run1/_manifest.json") == '{"execution_id": "1"}'
+    assert _git(checkout, "log", "-1", "--format=%an|%ae") == f"{actor}|{email}"
+
+
+def test_an_unpushed_commit_with_a_space_in_its_email_is_still_strata_s_own(tmp_path: Path):
+    """An older strata built `First Last@strata-audit.local`; a commit it could not push is pushed by the next run,
+    not refused as foreign."""
+    bare = _server(tmp_path)
+    checkout = _pipeline_checkout(tmp_path, bare)
+    (checkout / "deploys" / "run0").mkdir(parents=True)
+    (checkout / "deploys" / "run0" / "_manifest.json").write_text('{"execution_id": "0"}', encoding="utf-8")
+    _git(checkout, "add", "deploys/run0/_manifest.json")
+    subprocess.run(
+        ["git", "-c", "user.name=First Last", "-c", "user.email=First Last@strata-audit.local", "commit", "-q", "-m",
+         "audit: run0"],
+        cwd=checkout, check=True, capture_output=True,
+    )  # fmt: skip
+
+    result = _push(tmp_path, actor="First Last")
+
+    assert result.success, result.detail
+    assert _on_server(tmp_path, bare, "deploys/run0/_manifest.json") == '{"execution_id": "0"}'
     assert _on_server(tmp_path, bare, "deploys/run1/_manifest.json") == '{"execution_id": "1"}'
 
 

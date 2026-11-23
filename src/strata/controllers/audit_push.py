@@ -60,7 +60,7 @@ from pathlib import Path
 
 from strata.controllers.checkout_state import checkout_state
 from strata.controllers.git_checkout import ensure_synced_checkout
-from strata.integrations.git_push import commit_in_checkout, credential_env
+from strata.integrations.git_push import commit_email, commit_in_checkout, credential_env
 from strata.models.audit_model import AuditGitSinkTargetModel
 from strata.models.auth_models import AuthenticationModel
 from strata.models.solution_model import RemoteType, SolutionModel
@@ -220,7 +220,7 @@ def _configure_identity(checkout_path: Path, actor: str, *, env: Mapping[str, st
     """Set a local (not global) git identity so `git commit` never fails on a
     CI runner with no git identity configured — `actor` is `resolve_actor()`'s
     output, so the commit author reflects who actually triggered the run."""
-    for key, value in (("user.name", actor), ("user.email", f"{actor}@strata-audit.local")):
+    for key, value in (("user.name", actor), ("user.email", commit_email(actor, "strata-audit.local"))):
         result = run_command(["git", "config", key, value], cwd=checkout_path, env=env, timeout=_GIT_TIMEOUT)
         if not result.is_successful:
             return PushResult(False, f"'git config {key}' failed: {result.stderr.strip()}")

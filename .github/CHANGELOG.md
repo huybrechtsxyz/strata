@@ -90,6 +90,12 @@ before upgrading.
   deployments, environments and tenants alike. Neither field was acted on yet, so no deploy ran differently.
 - A hint on a finding from `strata validate` (such as `base_unused`, `document_unreferenced` or the
   `version_*` findings) could be lost when the finding was attributed to its file; it is now always shown.
+- An audit sink or GitOps step on a path remote no longer refuses its own commit when the actor has a space in it
+  (`audit_sink_push_failed`: "…was not made by strata"). In Azure Pipelines that is the usual case:
+  `BUILD_REQUESTEDFOR` is the requester's display name, so nothing reached the sink, and `required: true` failed
+  the run. A commit an earlier version left unpushed is pushed by the next run. The author email is now a valid
+  address built from the actor (`First.Last@strata-audit.local`, not `First Last@strata-audit.local`); the author
+  name is unchanged. The workaround of overriding `BUILD_REQUESTEDFOR` in the pipeline can be dropped.
 
 ## [2.8.0] - 2026-11-20
 

@@ -20,7 +20,7 @@ import pytest
 
 from strata.integrations import git_push as git_push_module
 from strata.integrations.errors import IntegrationError
-from strata.integrations.git_push import credential_keys, prepare_git_credentials, push_file
+from strata.integrations.git_push import commit_email, credential_keys, prepare_git_credentials, push_file
 from strata.models.auth_models import (
     AuthenticationModel,
     CLIAuthenticationModel,
@@ -49,6 +49,37 @@ def _capture(monkeypatch):
 
     monkeypatch.setattr(git_push_module, "run_command", _fake_run_command)
     return captured
+
+
+@pytest.mark.parametrize(
+    ("actor", "email"),
+    [
+        ("jane.doe", "jane.doe@strata-audit.local"),
+        ("First Last", "First.Last@strata-audit.local"),
+        ("first.last@example.com", "first.last.example.com@strata-audit.local"),
+        ("DOMAIN\\jdoe", "DOMAIN.jdoe@strata-audit.local"),
+        ("José  Müller", "Jos.M.ller@strata-audit.local"),
+        (" -- ", "--@strata-audit.local"),
+        ("   ", "unknown@strata-audit.local"),
+        ("@@@", "unknown@strata-audit.local"),
+    ],
+)
+def test_commit_email_is_a_valid_address_whatever_the_actor(actor: str, email: str):
+    assert commit_email(actor, "strata-audit.local") == email
+
+
+def test_gitops_clone_identity_uses_a_valid_email(tmp_path: Path, monkeypatch):
+    """Azure Pipelines' `BUILD_REQUESTEDFOR` is a display name; strata's own clone gets a valid email for it."""
+    captured = _capture(monkeypatch)
+    monkeypatch.setenv("BUILD_REQUESTEDFOR", "First Last")
+    rendered = tmp_path / "values.yaml"
+    rendered.write_text("a: 1\n")
+
+    push_file(tmp_path, _remote(), rendered, "apps/forge/values.yaml", "msg")
+
+    config_calls = [c for c in captured if c[:2] == ["git", "config"]]
+    assert ["git", "config", "user.name", "First Last"] in config_calls
+    assert ["git", "config", "user.email", "First.Last@strata-gitops.local"] in config_calls
 
 
 # ---------------------------------------------------------------------------

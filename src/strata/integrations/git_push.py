@@ -42,6 +42,7 @@ ADR-0003 allows a higher layer importing a lower one). `method: cli`/
 """
 
 import os
+import re
 import shutil
 import tempfile
 from collections.abc import Callable, Iterator, Mapping
@@ -475,6 +476,20 @@ _REJECTED_MARKERS = ("non-fast-forward", "fetch first")
 #: The author email domains of strata's own commits (`commit_in_checkout(email_domain=...)`): an audit sink's and a
 #: GitOps step's. Only commits with one of them may be pushed from a pipeline's checkout.
 STRATA_EMAIL_DOMAINS = frozenset({"strata-audit.local", "strata-gitops.local"})
+#: What may not appear in the local part of a commit email `commit_email()` builds.
+_UNSAFE_LOCAL_PART = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def commit_email(actor: str, email_domain: str) -> str:
+    """The author email of a commit strata makes for `actor`: `<local part>@<email_domain>`.
+
+    The actor is a display name as often as a login (Azure Pipelines' `BUILD_REQUESTEDFOR` is "First Last"), or
+    already an email. Each run of characters an email's local part should not hold becomes one `.`, so "First Last"
+    gives `First.Last@...` and `jane@example.com` gives `jane.example.com@...`. The readable actor stays in
+    `user.name`.
+    """
+    local = re.sub(r"\.{2,}", ".", _UNSAFE_LOCAL_PART.sub(".", actor)).strip(".")
+    return f"{local or 'unknown'}@{email_domain}"
 
 
 def checkout_problem(checkout: Path) -> str | None:
@@ -524,7 +539,7 @@ def commit_in_checkout(
 
     Never raises for a git failure: `success=False` with the reason.
     """
-    identity = ["-c", f"user.name={actor}", "-c", f"user.email={actor}@{email_domain}"]
+    identity = ["-c", f"user.name={actor}", "-c", f"user.email={commit_email(actor, email_domain)}"]
     pathspecs = [f":(literal){path}" for path in paths]
 
     def git(*args: str) -> CommandResult:
@@ -576,13 +591,16 @@ def commit_in_checkout(
 
 def _foreign_commits(git: Callable[..., CommandResult], branch: str) -> str | None:
     """Why `HEAD` cannot be pushed to `branch` (just fetched), or `None`: a commit it has that the branch lacks is
-    not strata's own, or is a merge."""
-    listed = git("log", "--format=%H %ae %P", "FETCH_HEAD..HEAD")
+    not strata's own, or is a merge.
+
+    The fields are NUL-separated: an author email may hold a space (one an older strata built from "First Last"), and
+    splitting on whitespace would read its second word as a parent."""
+    listed = git("log", "--format=%H%x00%ae%x00%P", "FETCH_HEAD..HEAD")
     if not listed.is_successful:
         return f"could not compare the checkout with '{branch}': {listed.stderr.strip()}"
     for line in listed.stdout.splitlines():
-        sha, email, *parents = line.split()
-        if len(parents) > 1 or email.rpartition("@")[2] not in STRATA_EMAIL_DOMAINS:
+        sha, email, parents = line.split("\x00")
+        if len(parents.split()) > 1 or email.rpartition("@")[2] not in STRATA_EMAIL_DOMAINS:
             return (
                 f"the checkout's HEAD has commit {sha[:12]} that is not on '{branch}' and was not made by strata, so "
                 f"pushing HEAD would put it on '{branch}'. Check out '{branch}' in the pipeline, or write to a "
@@ -681,7 +699,7 @@ def _configure_identity(checkout_path: Path, actor: str, *, env: Mapping[str, st
     """Set a local (not global) git identity so `git commit` never fails on a
     CI runner with no git identity configured — `actor` is `resolve_actor()`'s
     output, so the commit author reflects who actually triggered the run."""
-    for key, value in (("user.name", actor), ("user.email", f"{actor}@strata-gitops.local")):
+    for key, value in (("user.name", actor), ("user.email", commit_email(actor, "strata-gitops.local"))):
         result = run_command(["git", "config", key, value], cwd=checkout_path, env=env, timeout=_GIT_TIMEOUT)
         if not result.is_successful:
             return PushResult(False, f"'git config {key}' failed: {result.stderr.strip()}")
