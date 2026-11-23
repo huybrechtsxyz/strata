@@ -1,7 +1,7 @@
 # Helm Chart Deployment — Design
 
 - Status: current
-- Last updated: 2026-11-12
+- Last updated: 2026-11-23
 
 ## Overview
 
@@ -55,7 +55,9 @@ installed, and an unreachable registry fails the build, not a deploy half-way th
   `<source>` is the remote name, or the repository's alias for an inline `chart_repository`; `<version>` is the exact
   version. The digest is strata's own SHA-256 of the archive, so a cache hit needs no `helm`, and it is the same for
   HTTP and OCI. A pull lands in a temporary `.pull-*` directory in the cache and is renamed into place, so an
-  interrupted pull leaves no partial entry; a rename that fails is `helm_chart_pull_failed`. Removing the temporary
+  interrupted pull leaves no partial entry. A rename refused because another process holds a file in it open
+  (`PermissionError`: on Windows, a virus scanner reading the new archive) is retried for about 3 seconds
+  (`RELEASE_WAITS`); a rename that still fails, or fails otherwise, is `helm_chart_pull_failed`. Removing the temporary
   directory is best effort, a leftover `.pull-*` is never read as an entry, and a pull removes those older than an hour
   (`STALE_STAGING_SECONDS`).
 - **Pin** (`_pin_registry_chart()`): an exact `chart_version` already cached is pinned from the cache; anything else is
@@ -479,7 +481,10 @@ has been done (no cluster).
   lint, the SBOM recorded the declared version (possibly a range), and an unreachable registry failed the deploy mid-way.
   A check-phase pull (`helm show values`, `helm template`) was designed first and dropped, because it came after the SBOM
   was written; ADR-0054 moved the pull to the build. On Windows a virus scanner can hold a freshly pulled archive open,
-  which made a strict cleanup of the staging directory fail the pull now and then; cleanup became best effort.
+  which made a strict cleanup of the staging directory fail the pull now and then; cleanup became best effort. The
+  same hold also fails the rename into the cache ("Access is denied"), seen as a test that failed once in a full
+  parallel test run and never alone. A rename cannot be best effort, so it waits: the scanner lets go within
+  moments.
 - Local chart dependencies: `helm lint` only warns about a missing dependency, and the failure is at `helm upgrade`; a
   `file://` dependency could never work from the build copy. `helm dependency build` was rejected because it writes a
   `Chart.lock` when there is none (inventing a tool's lock, against ADR-0054) and, with a lock, needs the repository in
