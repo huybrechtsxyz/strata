@@ -103,7 +103,7 @@ non-obvious choices below.
    - **`--resolve` (opt-in, Q6/Q7):** if passed, *additionally* calls `resolve_values()` over **every** declared key (including secrets and integration-backed stores, reusing the same three dicts above — no second reachability walk) — real network calls happen here, reported via `Diagnostics` (`.info()`/`.error()` per key), merged into `build_run()`'s own returned `Diagnostics`. **Resolved values are never written to any file, with or without the flag.** Without `--resolve`, `resolved: ValueResolution` is just an empty placeholder — no network call beyond `sync_source()` happens anywhere in the default path (Q6).
 
    **Deliberately before `clean`, not after** (implementation detail worth documenting explicitly — this diverged from an earlier draft of this section): if deriving these values or `--resolve`'s validation fails, `build_path` is never touched at all. Cleaning first and failing after would instead leave a wiped, empty build directory behind on the same error — a strictly worse failure mode for no benefit, since none of this step touches the filesystem.
-3. **Then `build_path` is cleaned if requested**, and these five values populate new fields on `ResolvedWorkspaceGraph`, built once and handed unchanged to every provisioner (Q4). `build_controller.py` then writes `build_path/resolved.yaml` (Q8) — a plain, non-auto-loaded YAML manifest, essentially a direct serialization of `variable_refs + feature_refs + secret_refs` (+ `properties`/`custom`). Safe to dump wholesale: every field is either a declaration or a value already destined for build output anyway. An optional sixth key, `promotion` (docs/work/promotion.md Phase 4), is written only when the deployment's `spec.version` resolved to a `Version` document tagged with a ring — `{workspace, ring, order, wave?, version}`, read straight off `graph.version.spec.promotion` (no new resolution logic; `graph.version` is the same value already computed for the `remotes` pin overlay). Omitted entirely, not `null`, for the common untagged case.
+3. **Then `build_path` is cleaned if requested**, and these five values populate new fields on `ResolvedWorkspaceGraph`, built once and handed unchanged to every provisioner (Q4). `build_controller.py` then writes `build_path/resolved.yaml` (Q8) — a plain, non-auto-loaded YAML manifest, essentially a direct serialization of `variable_refs + feature_refs + secret_refs` (+ `properties`/`custom`). Safe to keep in an audit repository: every field is either a declaration or a value from a document in the solution (`constant`/`artifact` stores). An `environment`-store value is left out: it comes from the build's environment, where a pipeline's secrets also sit, and Terraform gets it through `strata.auto.tfvars.json` instead. An optional sixth key, `promotion` (docs/work/promotion.md Phase 4), is written only when the deployment's `spec.version` resolved to a `Version` document tagged with a ring — `{workspace, ring, order, wave?, version}`, read straight off `graph.version.spec.promotion` (no new resolution logic; `graph.version` is the same value already computed for the `remotes` pin overlay). Omitted entirely, not `null`, for the common untagged case.
 4. **Then, per provisioner:** `sync_source()` (the one other legitimate build-time network call) followed by `integration.prepare()`. For Terraform, `default_output()`'s signature is **unchanged** (`resolved`, `provisioner`, `graph`) — it now additionally reads `graph.variable_refs`/`graph.feature_refs` (filtered to `value is not None`) to emit `flags.auto.tfvars.json`/`variables.auto.tfvars.json`, and `graph.properties`/`graph.custom` directly to emit `properties.auto.tfvars.json`/`custom.auto.tfvars.json` — alongside the 8 structural categories already built. Zero merge/reachability logic inside the integration itself.
 5. **Helm/Compose are untouched** — both already discard `resolved` for the same reason Terraform used to (Phase 3 token substitution, deferred, out of scope here); neither has a category-file convention that these four new categories would map onto.
 
@@ -130,7 +130,7 @@ flowchart TB
     DIAG --> CLEAN
 
     CLEAN --> GRAPH["ResolvedWorkspaceGraph now carries all five fields"]
-    GRAPH --> MANIFEST["write build_path/resolved.yaml - Q8<br/>near-direct dump of variable_refs+feature_refs+secret_refs<br/>value shown only where already safe - constant/environment"]
+    GRAPH --> MANIFEST["write build_path/resolved.yaml - Q8<br/>near-direct dump of variable_refs+feature_refs+secret_refs<br/>value shown only for constant/artifact stores - never environment"]
     MANIFEST --> LOOP["for each provisioner"]
 
     subgraph OK["Always allowed - network"]
@@ -417,6 +417,38 @@ pin-aware resolved `Version` document (the same value `apply_remote_version_pins
 already consumes) — `write_resolved_manifest()`'s own `_dump_promotion()`
 reads `graph.version.spec.promotion` directly from it, no separate lookup.
 
+### Secret-like variable keys
+
+A variable or feature has none of a secret's protection: its value goes in clear to `strata.auto.tfvars.json` and
+Terraform state, and a `constant` one sits in the solution's git repository. A pipeline secret declared as a
+variable by mistake (`DB_PASSWORD`, `store: environment`) loses all of that, and nothing used to notice.
+
+The Configuration document can name the keys that give such a mistake away
+([configuration_model.py](../../src/strata/models/configuration_model.py) `DisallowedVariableKeysModel`):
+
+```yaml
+spec:
+  security:
+    disallowed_variable_keys:
+      patterns: ["*PASSWORD*", "*TOKEN*", "*SECRET*"]
+      exceptions: ["*_SECRET_ID", "*_SECRET_NAME"]
+      enforcement: warn        # warn (default) | deny
+```
+
+- `strata validate` checks every `spec.variables[].key` and `spec.features[].key` of every environment document,
+  whatever its store, and reports `variable_key_looks_secret` for a key that matches a pattern and no exception
+  ([environment_service.py](../../src/strata/services/environment_service.py) `_validate_variable_keys()`).
+  Secrets are never checked: that is where such a key belongs.
+- Patterns are globs (`*`, `?`, `[...]`), matched against the whole key, ignoring case.
+- `deny` makes the finding an error, which also stops `build run` and `deploy run`; `warn` reports it only.
+- An exception that matches no variable or feature key in any environment document is reported as information
+  (`disallowed_variable_keys_unused_exception`), so a typo or a stale entry shows up.
+- The check runs only when the block is set. Strata ships no pattern list: every pattern and exception is the
+  platform's, in its Configuration document, like the store allow-lists beside it. Exceptions are not accepted
+  in an environment document, so a team cannot switch the platform's rule off from its own document.
+- Not covered: `properties`/`custom` (free-form, no keys to judge) and the values themselves (entropy, key
+  markers), which is a secret scanner's job.
+
 ## Related Decisions
 
 - [ADR-0021](../decisions/0021-integration-layer.md) D5/D6 — integration dispatch pattern (one `prepare()`, per-subclass `default_output()`).
@@ -445,6 +477,10 @@ reads `graph.version.spec.promotion` directly from it, no separate lookup.
 - The declaration inventory (`resolved.yaml`) is deliberately a plain, non-auto-loaded YAML file, not Terraform `*.auto.tfvars.json` like v1 - v1's shape forces every consuming repo to also declare matching `variable "required_variables" {}` blocks (or accept a `terraform plan` error), a coupling strata should not reintroduce.
 - `--env-file PATH` (repeatable) was added for local-dev parity with CI (which already exports real `ENVIRONMENT`-store values via the pipeline) - merged into `os.environ` via `setdefault()` so an already-exported real value always wins over a file's value.
 - `OutputProfileModel`/`emits`-based category gating is out of scope here — see [output-profile-model.md](../archive/output-profile-model.md) (archived 2026-10-14, superseded by ADR-0035's unified projection before it was ever built).
+- 2026-11-24: `spec.security.disallowed_variable_keys` (see "Secret-like variable keys"). First designed with a
+  built-in pattern list, on by default as a warning; changed before it was built to run only when configured,
+  with every pattern in the Configuration document, matching the store allow-lists.
+- 2026-11-23: `resolved.yaml` stopped writing `environment`-store values. A git audit sink now keeps the file next to the manifest ([audit-trail.md](audit-trail.md)), and a pipeline secret declared as a variable by mistake would have reached it. Nothing read those values back.
 - 2026-10-06: `resolved.yaml` gained a sixth, optional `promotion` key (docs/work/promotion.md Phase 4) - `{workspace, ring, order, wave?, version}`, written only when the deployment's `spec.version` resolved to a `Version` document tagged with a ring. Answers "did my deployment land where I meant it to" (deployment-scoped, human-intent) - a different question from `strata validate`'s own cross-document ring/order/wave consistency checks (docs/work/promotion.md Phase 2), which run independently of any one deployment. `ResolvedWorkspaceGraph` gained a `version: VersionModel | None` field to carry the already-pin-aware resolved document through to `write_resolved_manifest()`.
 - 2026-10-08: Added a worked example (shared Azure Application Gateway WAF
   policy, one `omp_gateway` list on the Workspace plus one `tenant_gateway`

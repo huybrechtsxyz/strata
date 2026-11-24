@@ -8,6 +8,7 @@ local bare git repository for the `git` sink dispatch tests, and mocked
 `terraform`/`run_command` so no real binaries are needed.
 """
 
+import hashlib
 import json
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -250,6 +251,63 @@ def test_manifest_includes_sbom_reference_when_present(tmp_path: Path, _terrafor
     assert '"path": "sbom.json"' in manifest_text
     assert '"format": "cyclonedx-1.6"' in manifest_text
     assert '"sha256": "sha256:' in manifest_text
+
+
+def test_the_audit_folder_keeps_the_very_resolved_yaml_the_manifest_hashes(tmp_path: Path, _terraform_stub):
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok and not diagnostics.warnings, diagnostics.messages()
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    kept = manifest_path.parent / "resolved.yaml"
+    assert kept.read_bytes() == (build_path / "resolved.yaml").read_bytes()
+    platform = json.loads(manifest_path.read_text(encoding="utf-8"))["artifacts"]["platform"]
+    assert platform["hash"] == f"sha256:{hashlib.sha256(kept.read_bytes()).hexdigest()}"
+
+
+@pytest.mark.parametrize(
+    ("content", "reason"),
+    [
+        (
+            "variables:\n  API_TOKEN: {store: environment, value: s3cr3t}\n"
+            "features:\n  BETA: {store: environment, value: true}\n",
+            "features.BETA, variables.API_TOKEN carry a value read from the build's environment",
+        ),
+        ("variables: [unclosed\n", "it does not read as YAML"),
+    ],
+)
+def test_a_resolved_yaml_from_an_older_build_with_environment_values_is_not_kept(
+    tmp_path: Path, _terraform_stub, content: str, reason: str
+):
+    """A build before 2026-11-23 wrote environment-store values; the deploy may run on such a build folder."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+    (build_path / "resolved.yaml").write_text(content, encoding="utf-8")
+
+    diagnostics = _finalize(root, build_path)
+
+    assert diagnostics.ok
+    [warning] = diagnostics.warnings
+    assert warning.code == "audit_resolved_not_kept" and reason in warning.message
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    assert not (manifest_path.parent / "resolved.yaml").exists()
+    assert '"path": "resolved.yaml"' in manifest_path.read_text()  # still referenced by hash
+
+
+def test_the_audit_folder_keeps_the_very_sbom_the_manifest_hashes(tmp_path: Path, _terraform_stub):
+    """The build directory is thrown away on CI: a hash of a file nobody keeps cannot be checked later."""
+    root = _solution_root(tmp_path)
+    build_path = _run_deploy_and_build(root, tmp_path)
+
+    assert _finalize(root, build_path).ok
+
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    kept = manifest_path.parent / "sbom.json"  # where the manifest's `sbom.path` points, next to it
+    assert kept.read_bytes() == (build_path / "sbom.json").read_bytes()
+    recorded = json.loads(manifest_path.read_text(encoding="utf-8"))["sbom"]["sha256"]
+    assert recorded == f"sha256:{hashlib.sha256(kept.read_bytes()).hexdigest()}"
 
 
 def test_finalize_and_distribute_deploy_audit_includes_policy_results_in_the_manifest(
@@ -643,6 +701,7 @@ def test_manifest_omits_sbom_reference_without_error_when_absent(tmp_path: Path,
     assert not diagnostics.warnings
     manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
     assert '"sbom"' not in manifest_path.read_text()
+    assert not (manifest_path.parent / "sbom.json").exists()
 
 
 def test_a_corrupt_sbom_is_referenced_and_warned_about_never_failing_the_audit(tmp_path: Path, _terraform_stub):
@@ -660,6 +719,9 @@ def test_a_corrupt_sbom_is_referenced_and_warned_about_never_failing_the_audit(t
     assert '"path": "sbom.json"' in manifest_text
     assert '"sha256": "sha256:' in manifest_text
     assert '"component_count"' not in manifest_text
+    # Kept as it was on disk: the record shows what the hash vouches for, corrupt or not.
+    kept = next(layout.audit_dir(root).rglob("_manifest.json")).parent / "sbom.json"
+    assert kept.read_text(encoding="utf-8") == "{truncated"
 
 
 def test_an_sbom_that_cannot_be_read_is_left_out_with_a_warning(tmp_path: Path, _terraform_stub, monkeypatch):
@@ -677,7 +739,9 @@ def test_an_sbom_that_cannot_be_read_is_left_out_with_a_warning(tmp_path: Path, 
 
     assert diagnostics.ok
     assert [w.code for w in diagnostics.warnings] == ["audit_sbom_unreadable"]
-    assert '"sbom"' not in next(layout.audit_dir(root).rglob("_manifest.json")).read_text()
+    manifest_path = next(layout.audit_dir(root).rglob("_manifest.json"))
+    assert '"sbom"' not in manifest_path.read_text()
+    assert not (manifest_path.parent / "sbom.json").exists()  # no copy of a file the manifest does not vouch for
 
 
 # ---------------------------------------------------------------------------
@@ -711,6 +775,25 @@ def test_event_override_disables_measured_dispatch_but_not_local_write(tmp_path:
     # only names deployment.completed anyway (measured already gated off too).
     assert "_metrics.json" not in captured_files
     assert "_manifest.json" in captured_files
+    # The files the manifest references go with it, whatever the sink's events.
+    assert {"sbom.json", "resolved.yaml"} <= set(captured_files)
+
+
+def test_a_git_sink_gets_no_sbom_when_the_build_wrote_none(tmp_path: Path, _terraform_stub, monkeypatch):
+    root = _solution_root(tmp_path, remote_url="https://example.invalid/does-not-matter.git")
+    _add_configuration(root, _git_sink_config("deployment.completed"))
+    build_path = _run_deploy_and_build(root, tmp_path)
+    (build_path / "sbom.json").unlink()
+    pushed: dict[str, Path] = {}
+    monkeypatch.setattr(
+        audit_run_module,
+        "push_audit_files",
+        lambda _r, _s, _sol, files, *a, **k: pushed.update(files) or PushResult(True),
+    )
+
+    assert _finalize(root, build_path).ok
+
+    assert sorted(pushed) == ["_manifest.json", "resolved.yaml"]
 
 
 # ---------------------------------------------------------------------------
@@ -748,6 +831,8 @@ def test_configured_git_sink_pushes_to_real_bare_repo(tmp_path: Path, _terraform
     pushed = list((verify_dir / "audit").rglob("_manifest.json"))
     assert len(pushed) == 1
     assert list((verify_dir / "audit").rglob("_metrics.json"))
+    assert (pushed[0].parent / "sbom.json").read_bytes() == (build_path / "sbom.json").read_bytes()
+    assert (pushed[0].parent / "resolved.yaml").read_bytes() == (build_path / "resolved.yaml").read_bytes()
 
 
 def _path_remote_sink_solution(tmp_path: Path, *, required: bool, action: str = "push") -> tuple[Path, Path, Path]:
@@ -1189,7 +1274,8 @@ def test_a_destroy_pushes_the_manifest_to_a_git_sink_that_lists_destroyed(tmp_pa
     _finalize(root, build_path, action="destroy")
 
     assert len(pushed) == 1
-    assert set(pushed[0]) == {"_manifest.json"}
+    # The manifest still references what was destroyed.
+    assert set(pushed[0]) == {"_manifest.json", "sbom.json", "resolved.yaml"}
 
 
 def test_a_destroy_pushes_nothing_to_a_git_sink_that_lists_only_completed(tmp_path: Path, _terraform_stub, monkeypatch):

@@ -93,8 +93,11 @@ class ValueReference:
     exactly the values `build run` is already allowed to know and already
     writes to `.auto.tfvars.json` output. For a secret, or any
     integration-backed store, `value` stays `None` — structurally, not by a
-    filter applied later — so this type (and any collection of it) is safe
-    to dump wholesale for debugging/audit.
+    filter applied later.
+
+    An `environment` store's value is read from the build's environment, where a CI pipeline also puts its
+    secrets: a secret declared as a variable by mistake would carry it. So it is not safe to dump wholesale for
+    audit: `resolved.yaml` (`build_controller._dump_refs()`) leaves it out.
     """
 
     key: str

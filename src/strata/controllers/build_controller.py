@@ -108,6 +108,7 @@ from strata.models.provider_model import ProviderModel
 from strata.models.provisioning_model import ProvisionerModel, ProvisioningStepModel
 from strata.models.resource_model import ResourceModel
 from strata.models.solution_model import SolutionRemoteModel
+from strata.models.store_model import FeatureStoreType, VariableStoreType
 from strata.models.tenant_model import TenantModel
 from strata.models.version_model import VersionModel, VersionPinModel, pin_key, pin_owner, version_names
 from strata.models.workspace_model import WorkspaceModel, effective_resources_and_namespaces
@@ -273,6 +274,10 @@ def build_resolved_workspace_graph(
     )
 
 
+#: Stores whose value `build run` reads from its own environment (`VariableStoreType`/`FeatureStoreType`).
+ENVIRONMENT_STORES = frozenset({VariableStoreType.ENVIRONMENT.value, FeatureStoreType.ENVIRONMENT.value})
+
+
 def _dump_refs(refs: list[ValueReference]) -> dict[str, dict[str, Any]]:
     """One `resolved.yaml` section (docs/design/build-time-value-categories.md,
     Q8) — `key -> {store, description?, value?}`. `value` is omitted
@@ -280,13 +285,17 @@ def _dump_refs(refs: list[ValueReference]) -> dict[str, dict[str, Any]]:
     `build_value_references()` (`constant`/`environment` stores only) —
     keeps a secret's entry visibly value-less rather than `value: null`,
     which could misread as "resolved to nothing".
+
+    An `environment` store's value is left out too (docs/design/audit-trail.md, "The audit files"): it comes from
+    the build's environment, where a pipeline's secrets also sit, and a git audit sink keeps this file. Terraform
+    still gets it, in `strata.auto.tfvars.json`.
     """
     dumped: dict[str, dict[str, Any]] = {}
     for ref in refs:
         entry: dict[str, Any] = {"store": ref.store}
         if ref.description is not None:
             entry["description"] = ref.description
-        if ref.value is not None:
+        if ref.value is not None and ref.store not in ENVIRONMENT_STORES:
             entry["value"] = ref.value
         dumped[ref.key] = entry
     return dumped
@@ -346,10 +355,9 @@ def write_resolved_manifest(
     auto-loads it, so no `.tf` module needs a matching `variable {}` block
     just to accommodate strata's own bookkeeping output.
 
-    Safe to write in full: every value in `graph.variable_refs`/`.feature_refs`
-    is either a declaration (no `value` key at all) or a `constant`/
-    `environment`-store value already written to a real `.auto.tfvars.json`
-    file elsewhere in this same build. `graph.secret_refs` never carries a
+    Safe to keep in an audit repository: every value in `graph.variable_refs`/`.feature_refs` is either a
+    declaration (no `value` key at all) or a `constant`/`artifact`-store value from a document in the solution.
+    An `environment`-store value is left out (`_dump_refs()`). `graph.secret_refs` never carries a
     `value` at all — enforced by `ValueReference`'s own construction in
     `build_value_references()`, not filtered out here.
 

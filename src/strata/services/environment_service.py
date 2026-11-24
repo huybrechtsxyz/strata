@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from strata.models.common_models import PlatformBaseModel
-from strata.models.configuration_model import ConfigurationSecurityModel
+from strata.models.configuration_model import ConfigurationSecurityModel, DisallowedVariableKeysModel
 from strata.models.deployment_model import DeploymentModel
 from strata.models.environment_model import EnvironmentModel, EnvironmentTemplateModel
 from strata.models.store_model import (
@@ -260,7 +260,9 @@ class EnvironmentService(BaseService[EnvironmentModel]):
 
         Returns:
             One error per variable/secret/feature whose `store` is not in
-            the corresponding allow-list.
+            the corresponding allow-list, and, with `disallowed_variable_keys`,
+            one finding per variable/feature whose key matches it
+            (`_validate_variable_keys()`).
         """
         diagnostics = Diagnostics()
         self._ensure_validated()
@@ -287,6 +289,9 @@ class EnvironmentService(BaseService[EnvironmentModel]):
                         code="disallowed_store",
                     )
 
+        if security.disallowed_variable_keys is not None:
+            diagnostics.extend(self._validate_variable_keys(security.disallowed_variable_keys))
+
         if security.allowed_feature_stores is not None:
             for feature in spec.features or []:
                 if feature.store.value not in security.allowed_feature_stores:
@@ -297,6 +302,33 @@ class EnvironmentService(BaseService[EnvironmentModel]):
                         code="disallowed_store",
                     )
 
+        return diagnostics
+
+    def _validate_variable_keys(self, rule: DisallowedVariableKeysModel) -> Diagnostics:
+        """One finding per variable or feature whose key matches one of `rule`'s patterns and none of its
+        exceptions, whatever its store (`ConfigurationSecurityModel.disallowed_variable_keys`)."""
+        diagnostics = Diagnostics()
+        assert self.model is not None
+        spec = self.model.spec
+        report = diagnostics.error if rule.enforcement == "deny" else diagnostics.warning
+        sections: list[tuple[str, str, Sequence[VariableStoreModel | FeatureStoreModel]]] = [
+            ("variables", "Variable", spec.variables or []),
+            ("features", "Feature", spec.features or []),
+        ]
+        for section, label, entries in sections:
+            for position, entry in enumerate(entries):
+                pattern = rule.match(entry.key)
+                if pattern is None:
+                    continue
+                report(
+                    f"{label} '{entry.key}' (store '{entry.store.value}') matches '{pattern}' in the platform's "
+                    "disallowed_variable_keys: a name like that holds a secret, and a variable's value is written "
+                    "in clear to strata.auto.tfvars.json and Terraform state. Declare it under spec.secrets, or, "
+                    "when it is not a secret, add an exception in the Configuration document's "
+                    "spec.security.disallowed_variable_keys.exceptions.",
+                    location=f"spec.{section}[{position}].key",
+                    code="variable_key_looks_secret",
+                )
         return diagnostics
 
 

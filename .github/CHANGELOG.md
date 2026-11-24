@@ -8,6 +8,32 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-24
+
+### Added
+
+- **Keys a variable may not use: `spec.security.disallowed_variable_keys`.** A secret declared as a variable by
+  mistake was written in clear to `strata.auto.tfvars.json` and Terraform state, and nothing noticed. The
+  Configuration document can now list key `patterns` (globs, case ignored, for example `"*PASSWORD*"`) and
+  `exceptions`; `strata validate` reports every variable or feature key that matches, whatever its store
+  (`variable_key_looks_secret`), as a warning or, with `enforcement: deny`, an error. An exception that matches
+  no key is reported as information. Off unless configured; strata ships no pattern list. See
+  [Keys a variable may not use](../docs/config/configuration.md#keys-a-variable-may-not-use).
+
+### Changed
+
+- **A git audit sink keeps the SBOM.** The audit manifest recorded `sbom.json` only by hash, and the file stayed in
+  the build directory, which CI throws away, so the hash could not be checked later. A deploy or destroy now copies
+  the very file it hashed next to `_manifest.json` in `.strata/audit/`, and every git sink pushes it with the
+  manifest. No setting; a build without an SBOM pushes none. Integration sinks are unchanged: they send events,
+  not files. See [the audit trail](../docs/design/audit-trail.md#the-git-sink).
+- **A git audit sink keeps `resolved.yaml` too, and the file no longer holds values from the environment.** A
+  variable or feature with `store: environment` is now listed in `resolved.yaml` without its value: the value came
+  from the build's environment, where a pipeline's secrets also sit. Terraform still gets it through
+  `strata.auto.tfvars.json`. The deploy copies `resolved.yaml` next to the manifest and every git sink pushes it.
+  A build folder from an older strata that still holds such values is not copied; the run warns
+  `audit_resolved_not_kept` and the manifest still references the file by hash.
+
 ## [2.9.0] - 2026-11-23
 
 ### Added
@@ -981,7 +1007,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.9.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.10.0...HEAD
+[2.10.0]: https://github.com/huybrechtsxyz/strata/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/huybrechtsxyz/strata/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/huybrechtsxyz/strata/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/huybrechtsxyz/strata/compare/v2.6.3...v2.7.0

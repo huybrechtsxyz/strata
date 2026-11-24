@@ -118,6 +118,9 @@ spec:
 
 - Keys are unique per store, not globally — `${var:X}` and `${secret:X}` are different tokens, so
   the same key name in both a variable and a secret is legitimate.
+- A platform can refuse variable and feature keys that look like secrets (`DB_PASSWORD`, `API_TOKEN`): see
+  [Keys a variable may not use](configuration.md#keys-a-variable-may-not-use). Declare such a value under
+  `spec.secrets`, which is never written to build output.
 - Only `constant`/`environment`/`github`/`artifact` stores resolve to anything today — any other
   `store` value validates as a recognized name but has no runtime resolver behind it yet, same
   discipline as [`provisioner`](workspace.md)'s open `tool` field.

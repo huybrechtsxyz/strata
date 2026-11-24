@@ -13,7 +13,7 @@ validated against the official CycloneDX schema before it is written.
 
 Three features read it afterwards: the `cve_policy` build gate (Trivy or Grype scans it), the
 `image_gate_policy` deploy gate (its container components are the images asked about), and the
-deploy audit record (which stores its hash). See [the how-to](../how-to/sbom-generation.md) for
+deploy audit record (which stores its hash and keeps a copy next to the manifest). See [the how-to](../how-to/sbom-generation.md) for
 using it, and [security-gates.md](security-gates.md) for the gates.
 
 ## Current Design
@@ -277,7 +277,9 @@ mechanism as `strata.integrations` (ADR-0021 D10).
   scan root.
 - Writing the SBOM without a manifest to reference it was a deliberate "write now, reference
   later" split. The deploy audit record now re-derives the reference (`audit_run._sbom_reference()`)
-  from the file on disk, since build and deploy are separate invocations.
+  from the file on disk, since build and deploy are separate invocations. Since 2026-11-23 it also copies
+  the file next to the manifest, and a git audit sink pushes it: the build directory does not survive CI,
+  so a hash alone could not be checked later ([audit-trail.md](audit-trail.md), "The audit files").
 - Every reader of `sbom.json` (image tag policy, image gate, audit record) shares one loader,
   `utils/sbom_file.read_sbom()`: no file is `None`, a file that cannot be read or parsed is a
   `ValueError`, and a missing `components` key (CycloneDX's empty SBOM) is an empty list. Each

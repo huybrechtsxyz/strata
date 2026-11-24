@@ -409,7 +409,7 @@ def test_a_successful_deploy_pushes_the_handover_document_with_the_audit_record(
     )
 
     assert not diagnostics.warnings, diagnostics.messages()
-    assert set(pushed) == {"_manifest.json", "_metrics.json", "_handover.md"}
+    assert set(pushed) == {"_manifest.json", "_metrics.json", "_handover.md", "sbom.json", "resolved.yaml"}
     document = pushed["_handover.md"].read_text(encoding="utf-8")
     assert "audit record `11111111-1111-1111-1111-111111111111`" in document
     assert "kv-prd-weu.vault.azure.net / api-key (latest)" in document
@@ -445,7 +445,7 @@ def test_a_failed_render_is_a_warning_and_the_audit_record_is_still_pushed(tmp_p
 
     assert diagnostics.ok
     assert [warning.code for warning in diagnostics.warnings] == ["documentation_render_failed"]
-    assert set(pushed) == {"_manifest.json", "_metrics.json"}
+    assert set(pushed) == {"_manifest.json", "_metrics.json", "sbom.json", "resolved.yaml"}
 
 
 def test_a_successful_deploy_records_its_audit_summary_for_the_report(tmp_path, monkeypatch):
