@@ -136,6 +136,15 @@ def _push_manifest(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("subcommand", ["status", "changes"])
+def test_help_says_deployment_picks_the_credentials(runner, subcommand):
+    """The optional DEPLOYMENT is a filter, but also resolves the sink remote's
+    integration credentials; without it, a pipeline read is ambient."""
+    output = " ".join(runner.invoke(cli, ["audit", subcommand, "--help"]).output.split())
+    assert "DEPLOYMENT also picks the credentials" in output
+    assert "your own git credentials" in output
+
+
 def test_outside_a_solution_exits_two(runner, tmp_path):
     result = runner.invoke(cli, ["audit", "status", "--path", str(tmp_path)])
     assert result.exit_code == EXIT_USAGE

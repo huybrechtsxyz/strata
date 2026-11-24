@@ -127,11 +127,46 @@ own docstring already states for credential handling. The read side never
 calls `_configure_identity()`, `git add`, `git commit`, or `git push` —
 those are push-only concerns.
 
-Same ambient-only git auth as every other remote operation today
-(`resolve_remote()`, `push_audit_files()`) — ambient SSH agent/credential
-helper, nothing new invented for read either, matching this codebase's
-existing documented gap rather than solving a different problem than the
-one asked.
+Originally ambient-only git auth (SSH agent, credential helper). The read
+now uses the sink remote's `integration` like the push does; see
+"Credentials" in the next section.
+
+### A sink on a path remote
+
+A sink's remote may have a `path` (the pipeline's checkout; see
+[remote-commit-provenance.md](remote-commit-provenance.md), "Writing to a path
+remote"). The read still clones `remote.url` at `sink.branch` into
+`.strata/audit-read/<remote>/<branch>`, exactly as for a `reference` remote:
+
+- **Not the pipeline's checkout.** It may be on another branch or behind the
+  branch the records were pushed to, and on a developer's machine it usually
+  does not exist. The sink's branch on the server is the record.
+Up to 2.10.0, `sync_read_checkout()` refused a path remote. That check
+predated path-remote sinks and was missed when they were added. A review of
+that fix found three more gaps in the read checkout, fixed with it and
+applying to every sink remote:
+
+- **The read always fetches itself.** `fetch: external` (implied by a
+  `path`, or set on a `reference` remote) names a checkout a pipeline places
+  for builds. Nobody places `.strata/audit-read/`, so passing the remote's
+  `fetch` through made `ensure_synced_checkout()` wait for a folder nobody
+  creates.
+- **A missing sink branch is not the default branch.** A push falls back to
+  `origin/HEAD` when its branch does not exist yet, to create it from there.
+  A read must not: it would show the default branch's files as the sink's.
+  `ensure_synced_checkout(fallback_to_default=False)` reports
+  `branch_found=False`, and both commands return no records with
+  `audit_read_branch_missing` (info). This is the normal state of a
+  path-remote sink with `action: commit` or `none` before the pipeline's
+  first push.
+- **Credentials.** The read uses the remote's `integration` the way a deploy
+  does for the push (`audit_run._resolve_git_sink_auth()`): a missing remote
+  or integration means ambient credentials. Its key references are values,
+  and values belong to a deployment's environments, so they are resolved
+  through the deployment the command names (`audit status <deployment>`).
+  Without one, the read is ambient, and a failed clone or fetch says how to
+  use the integration. A pipeline needs this: its credentials usually live
+  only in its own checkout, which the read never uses.
 
 ### Sink selection — single `git`-arm sink assumed for now
 
@@ -670,6 +705,8 @@ unchanged.
 
 
 ## History
+
+- After 2.10.0: `audit status` and `changes` read a sink whose remote has a `path`, by cloning the sink's branch (see "A sink on a path remote"). They used to refuse it, although deploys could write to it since path-remote sinks were added. With it, the read always fetches its own checkout, reports a missing sink branch instead of reading the default branch, and uses the remote's `integration` through a named deployment.
 
 - Both commands show each record's `action`. `audit status` keeps the latest manifest per deployment, and a `deploy destroy` writes a manifest like any other, so without the action a torn-down deployment would read as a successful deploy. There is no `--action` filter yet; add one when a pipeline asks for it.
 - Multi-sink reads (a `--sink NAME` flag, merge+dedup across more than one `git`-arm sink) are deliberately out of scope - no real config (this repo's dogfood example or the one real consumer) configures even a single audit sink today, so zero or multiple configured sinks both fail loudly rather than building a disambiguation UI for a need nothing has hit yet.

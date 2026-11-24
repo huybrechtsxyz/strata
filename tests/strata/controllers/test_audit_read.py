@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from strata.controllers import audit_read
 from strata.controllers.audit_push import push_audit_files
 from strata.controllers.audit_read import (
     AuditReadError,
@@ -31,9 +32,11 @@ from strata.controllers.audit_read import (
     resolve_readable_sink,
     sync_read_checkout,
 )
+from strata.controllers.git_checkout import SyncResult
 from strata.controllers.solution_context import open_solution
 from strata.models.audit_model import AuditConfigModel, AuditGitSinkTargetModel, AuditSinkModel
-from strata.models.solution_model import RemoteType, SolutionModel, SolutionRemoteModel
+from strata.models.solution_model import RemoteFetch, RemoteType, SolutionModel, SolutionRemoteModel
+from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
 from strata.utils.errors import UsageError
 
@@ -155,13 +158,63 @@ def test_sync_read_checkout_raises_for_a_non_git_remote_type(tmp_path: Path):
         sync_read_checkout(tmp_path, solution, sink)
 
 
-def test_sync_read_checkout_raises_for_a_path_remote(tmp_path: Path):
+def _recording_sync(calls: list[tuple], result: SyncResult | None = None):
+    def fake_sync(url, branch, checkout_path, *, fetch=RemoteFetch.STRATA, env=None, fallback_to_default=True):
+        calls.append((url, branch, checkout_path, fetch, fallback_to_default))
+        return result or SyncResult(True)
+
+    return fake_sync
+
+
+def test_sync_read_checkout_clones_the_sink_branch_of_a_path_remote(tmp_path: Path, monkeypatch):
+    """A path remote implies `fetch: external`, which covers only the pipeline's
+    checkout: the read clones `remote.url` at `sink.branch` itself."""
+    calls: list[tuple] = []
+    fake_sync = _recording_sync(calls)
+
+    monkeypatch.setattr(audit_read, "ensure_synced_checkout", fake_sync)
     remote = SolutionRemoteModel(name="audit-repo", type=RemoteType.GIT, url="https://h/x.git", path="repos/x")
+    assert remote.fetch is RemoteFetch.EXTERNAL
+    solution = SolutionModel.model_validate({"meta": {"name": "s"}, "spec": {"remotes": [remote.model_dump()]}})
+    sink = _git_sink(branch="audit").git
+    assert sink is not None
+
+    checkout_path = sync_read_checkout(tmp_path, solution, sink)
+
+    assert checkout_path == layout.audit_read_checkout_path(tmp_path, "audit-repo", "audit")
+    assert calls == [("https://h/x.git", "audit", checkout_path, RemoteFetch.STRATA, False)]
+    assert not (tmp_path / "repos" / "x").exists()  # the pipeline's checkout is never touched
+
+
+def test_sync_read_checkout_fetches_itself_for_a_fetch_external_reference_remote(tmp_path: Path, monkeypatch):
+    """`fetch: external` names a checkout a pipeline places for builds; nobody
+    places strata's read checkout, so the read never waits for one."""
+    calls: list[tuple] = []
+    monkeypatch.setattr(audit_read, "ensure_synced_checkout", _recording_sync(calls))
+    remote = SolutionRemoteModel(
+        name="audit-repo", type=RemoteType.GIT, url="https://h/x.git", reference="main", fetch=RemoteFetch.EXTERNAL
+    )
     solution = SolutionModel.model_validate({"meta": {"name": "s"}, "spec": {"remotes": [remote.model_dump()]}})
     sink = _git_sink().git
     assert sink is not None
-    with pytest.raises(AuditReadError, match="has a 'path'"):
-        sync_read_checkout(tmp_path, solution, sink)
+
+    sync_read_checkout(tmp_path, solution, sink)
+
+    assert [call[3] for call in calls] == [RemoteFetch.STRATA]
+
+
+def test_sync_read_checkout_returns_none_when_the_sink_branch_is_missing(tmp_path: Path, monkeypatch):
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        audit_read, "ensure_synced_checkout", _recording_sync(calls, SyncResult(True, branch_found=False))
+    )
+    remote = SolutionRemoteModel(name="audit-repo", type=RemoteType.GIT, url="https://h/x.git", reference="main")
+    solution = SolutionModel.model_validate({"meta": {"name": "s"}, "spec": {"remotes": [remote.model_dump()]}})
+    sink = _git_sink(branch="audit").git
+    assert sink is not None
+
+    assert sync_read_checkout(tmp_path, solution, sink) is None
+    assert [call[4] for call in calls] == [False]  # never the default branch in its place
 
 
 # ---------------------------------------------------------------------------
@@ -689,6 +742,192 @@ def test_real_audit_status_round_trip(tmp_path: Path):
     # records DO exist in this sink — 'since' just excluded all of them, so the
     # message must say "no match for the filters", not "nothing in this sink"
     assert any(d.code == "audit_read_no_records_for_filters" for d in no_match_diagnostics.items)
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
+def test_real_audit_status_reads_a_sink_on_a_path_remote(tmp_path: Path):
+    """A sink whose remote has a `path` (the pipeline's checkout) is read by
+    cloning `url` at the sink's branch: the pipeline's folder is not there on
+    this machine, and the remote's `fetch: external` does not stop the read."""
+    bare_repo = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
+
+    root = _solution_root(tmp_path, str(bare_repo))
+    pushed = open_solution(root).require_valid()
+    pusher = pushed.controller.solution
+    assert pusher is not None
+    sink = AuditGitSinkTargetModel(remote="audit-repo", branch="main", path="records")
+    manifest = tmp_path / "run.json"
+    manifest.write_text(_manifest_json(deployment="app", started_at="2026-10-05T00:00:00+00:00"))
+    assert push_audit_files(root, sink, pusher, {"_manifest.json": manifest}, Path("run1"), "actor").success
+
+    _write(
+        root,
+        "strata.yaml",
+        MANIFEST_TEMPLATE.replace("reference: main", "path: repos/audit").format(remote_url=str(bare_repo)),
+    )
+    context = open_solution(root)
+    assert context.ok, context.diagnostics.messages()
+    context = context.require_valid()
+
+    records, diagnostics = audit_status(context, None)
+
+    assert diagnostics.ok, diagnostics.messages()
+    assert [record.deployment for record in records] == ["app"]
+    assert not (root / "repos" / "audit").exists()
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+@pytest.mark.slow
+def test_real_audit_reads_report_a_missing_sink_branch_instead_of_the_default_branch(tmp_path: Path):
+    """Records on `main` must not be shown as the `audit` branch's when nothing
+    was ever pushed to `audit` (for example `action: commit`, not pushed yet)."""
+    bare_repo = tmp_path / "bare.git"
+    subprocess.run(["git", "init", "--bare", "-b", "main", str(bare_repo)], check=True, capture_output=True)
+    root = _solution_root(tmp_path, str(bare_repo))
+    context = open_solution(root).require_valid()
+    solution = context.controller.solution
+    assert solution is not None
+    on_main = AuditGitSinkTargetModel(remote="audit-repo", branch="main", path="records")
+    manifest = tmp_path / "run.json"
+    manifest.write_text(_manifest_json(deployment="app", started_at="2026-10-05T00:00:00+00:00"))
+    assert push_audit_files(root, on_main, solution, {"_manifest.json": manifest}, Path("run1"), "actor").success
+
+    _write(root, "configuration.yaml", CONFIGURATION_TEMPLATE.replace("branch: main", "branch: audit"))
+    context = open_solution(root).require_valid()
+
+    records, diagnostics = audit_status(context, None)
+    changes, change_diagnostics = audit_changes(context, None, since=None, until=None, status=None)
+
+    assert (records, changes) == ([], [])
+    assert any(d.code == "audit_read_branch_missing" for d in diagnostics.items)
+    assert any(d.code == "audit_read_branch_missing" for d in change_diagnostics.items)
+
+
+# ---------------------------------------------------------------------------
+# Credentials: the sink remote's integration, resolved through a deployment
+# ---------------------------------------------------------------------------
+
+TOKEN_INTEGRATION = """apiVersion: strata.huybrechts.xyz/v2
+kind: integration
+meta:
+  name: audit-git
+spec:
+  type: git
+  capabilities: [sources]
+  authentication:
+    method: token
+    token:
+      token: AUDIT_GIT_TOKEN
+      username: audit-bot
+"""
+
+TOKEN_ENVIRONMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: environment
+meta:
+  name: prd
+spec:
+  secrets:
+    - key: AUDIT_GIT_TOKEN
+      store: environment
+      value: TEST_AUDIT_GIT_TOKEN
+"""
+
+TOKEN_DEPLOYMENT = """apiVersion: strata.huybrechts.xyz/v2
+kind: deployment
+meta:
+  name: app
+spec:
+  partial: true
+  environments:
+    - prd
+"""
+
+
+def _credential_context(tmp_path: Path):
+    root = _solution_root(tmp_path, "https://git.example.com/org/audit.git")
+    _write(
+        root,
+        "strata.yaml",
+        MANIFEST_TEMPLATE.format(remote_url="https://git.example.com/org/audit.git") + "      integration: audit-git\n",
+    )
+    _write(root, "integrations/audit-git.yaml", TOKEN_INTEGRATION)
+    _write(root, "environments/prd.yaml", TOKEN_ENVIRONMENT)
+    _write(root, "deployments/app.yaml", TOKEN_DEPLOYMENT)
+    context = open_solution(root)
+    assert context.ok, context.diagnostics.messages()
+    return context.require_valid()
+
+
+def _sink() -> AuditGitSinkTargetModel:
+    return AuditGitSinkTargetModel(remote="audit-repo", branch="main", path="records")
+
+
+def test_read_credentials_resolve_the_integration_through_the_named_deployment(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("TEST_AUDIT_GIT_TOKEN", "ghp_audit_read_token")
+    context = _credential_context(tmp_path)
+
+    auth, values, hint = audit_read._read_credentials(context, _sink(), "app")
+
+    assert auth is not None and auth.method == "token"
+    assert values == {"AUDIT_GIT_TOKEN": "ghp_audit_read_token"}
+    assert hint == ""
+
+
+@pytest.mark.parametrize("deployment", [None, "not-a-deployment"])
+def test_read_credentials_without_a_known_deployment_fall_back_to_ambient_with_a_hint(
+    tmp_path: Path, deployment: str | None
+):
+    context = _credential_context(tmp_path)
+
+    auth, values, hint = audit_read._read_credentials(context, _sink(), deployment)
+
+    assert (auth, values) == (None, None)
+    assert "integration 'audit-git'" in hint
+    assert "strata audit status <deployment>" in hint
+
+
+def test_read_credentials_fail_when_the_token_has_no_value(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("TEST_AUDIT_GIT_TOKEN", raising=False)
+    context = _credential_context(tmp_path)
+
+    with pytest.raises(AuditReadError, match="could not resolve the credentials of integration 'audit-git'"):
+        audit_read._read_credentials(context, _sink(), "app")
+
+
+def test_read_credentials_are_ambient_for_a_remote_without_an_integration(tmp_path: Path):
+    context = open_solution(_solution_root(tmp_path, "https://git.example.com/org/audit.git")).require_valid()
+
+    assert audit_read._read_credentials(context, _sink(), "app") == (None, None, "")
+
+
+def test_audit_status_passes_the_resolved_token_to_the_read(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("TEST_AUDIT_GIT_TOKEN", "ghp_audit_read_token")
+    context = _credential_context(tmp_path)
+    seen: list[tuple] = []
+
+    def fake_sync(root, solution, sink, *, auth=None, resolved_values=None):
+        seen.append((auth.method if auth else None, resolved_values))
+        return None
+
+    monkeypatch.setattr(audit_read, "sync_read_checkout", fake_sync)
+
+    audit_status(context, "app")
+
+    assert seen == [("token", {"AUDIT_GIT_TOKEN": "ghp_audit_read_token"})]
+
+
+def test_a_failed_ambient_read_names_the_deployment_hint(tmp_path: Path, monkeypatch):
+    context = _credential_context(tmp_path)
+
+    def failing_sync(root, solution, sink, *, auth=None, resolved_values=None):
+        raise AuditReadError("'git clone https://git.example.com/org/audit.git' failed: Authentication failed")
+
+    monkeypatch.setattr(audit_read, "sync_read_checkout", failing_sync)
+
+    with pytest.raises(AuditReadError, match=r"Authentication failed \(remote 'audit-repo' authenticates through"):
+        audit_status(context, None)
 
 
 # ---------------------------------------------------------------------------
