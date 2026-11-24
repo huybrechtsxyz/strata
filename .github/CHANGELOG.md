@@ -8,6 +8,16 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+### Added
+
+- **Keys a variable may not use: `spec.security.disallowed_variable_keys`.** A secret declared as a variable by
+  mistake was written in clear to `strata.auto.tfvars.json` and Terraform state, and nothing noticed. The
+  Configuration document can now list key `patterns` (globs, case ignored, for example `"*PASSWORD*"`) and
+  `exceptions`; `strata validate` reports every variable or feature key that matches, whatever its store
+  (`variable_key_looks_secret`), as a warning or, with `enforcement: deny`, an error. An exception that matches
+  no key is reported as information. Off unless configured; strata ships no pattern list. See
+  [Keys a variable may not use](../docs/config/configuration.md#keys-a-variable-may-not-use).
+
 ### Changed
 
 - **A git audit sink keeps the SBOM.** The audit manifest recorded `sbom.json` only by hash, and the file stayed in

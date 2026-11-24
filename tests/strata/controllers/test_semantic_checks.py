@@ -1702,6 +1702,39 @@ def test_environment_store_not_allowed_by_security_is_caught(tmp_path):
     assert any(d.code == "disallowed_store" for d in context.diagnostics.errors)
 
 
+def _with_disallowed_keys(root: Path, rule_yaml: str) -> None:
+    path = root / "configuration.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "  security:\n    disallowed_variable_keys:\n" + rule_yaml,
+        encoding="utf-8",
+    )
+
+
+def test_a_secret_like_variable_key_denied_by_the_configuration_fails_validate(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_disallowed_keys(root, "      patterns: ['*_IP']\n      enforcement: deny\n")
+
+    context = _resolve(root)
+
+    assert not context.ok
+    [error] = [d for d in context.diagnostics.errors if d.code == "variable_key_looks_secret"]
+    assert "PUBLIC_IP" in error.message
+    assert error.source is not None and error.source.endswith("environment.yaml")
+
+
+def test_an_exception_that_matches_no_key_is_reported_as_information(tmp_path):
+    root = _base_solution(tmp_path)
+    _with_disallowed_keys(root, "      patterns: ['*TOKEN*']\n      exceptions: ['PUBLIC_IP', '*_SECERT_ID']\n")
+
+    context = _resolve(root)
+
+    assert context.ok, context.diagnostics.messages()
+    [info] = [d for d in context.diagnostics.infos if d.code == "disallowed_variable_keys_unused_exception"]
+    assert "'*_SECERT_ID'" in info.message
+    assert info.location == "spec.security.disallowed_variable_keys.exceptions[1]"
+    assert info.source is not None and info.source.endswith("configuration.yaml")
+
+
 def test_a_variable_token_in_a_store_value_is_caught_by_validate(tmp_path):
     """`validate` used to accept this; it then failed at deploy time with
     `value_resolution_failed`, because a store's own value is only resolved

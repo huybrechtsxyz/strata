@@ -40,6 +40,7 @@ Configuration holds platform *policy*; the solution manifest holds
 *composition*.
 """
 
+from fnmatch import fnmatchcase
 from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -57,11 +58,57 @@ from strata.models.sbom_model import CveAllowedEntryModel
 from strata.utils.names import check_unique_names
 
 
+class DisallowedVariableKeysModel(PlatformBaseModel):
+    """Key patterns that a variable or feature may not use, because the name says it holds a secret.
+
+    A secret declared as a variable loses a secret's protection: its value is written in clear to
+    `strata.auto.tfvars.json`, then to Terraform state, and with a `constant` store it sits in the solution's
+    git repository. `strata validate` reports every `spec.variables[].key` and `spec.features[].key` of an
+    environment document that matches a pattern and no exception, whatever its store.
+
+    Design notes: docs/design/build-time-value-categories.md, "Secret-like variable keys". Every pattern
+    comes from the Configuration document: strata ships no list, and the check runs only when this block is
+    set, like the store allow-lists beside it. Exceptions live here too, not in an environment document, so a
+    team cannot switch off the platform's rule from its own document.
+    """
+
+    patterns: list[str] = Field(
+        min_length=1,
+        description="Glob patterns (`*`, `?`, `[...]`) matched against the whole key, ignoring case, for "
+        'example `"*PASSWORD*"` or `"*TOKEN*"`.',
+    )
+    exceptions: list[str] | None = Field(
+        None,
+        description="Glob patterns for keys that are never reported, even when a pattern matches, for "
+        'example `"*_SECRET_NAME"` for a key that names a secret in a vault instead of holding it.',
+    )
+    enforcement: Literal["warn", "deny"] = Field(
+        "warn",
+        description="`warn` (default) reports a matching key without failing validation; `deny` fails it, "
+        "and with it `build run` and `deploy run`.",
+    )
+
+    @field_validator("patterns", "exceptions")
+    @classmethod
+    def _no_blank_pattern(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None and any(not pattern.strip() for pattern in value):
+            raise ValueError("a pattern must not be empty")
+        return value
+
+    def match(self, key: str) -> str | None:
+        """The first pattern `key` matches, or `None` when it matches none or an exception matches it."""
+        upper = key.upper()
+        if any(fnmatchcase(upper, exception.upper()) for exception in self.exceptions or []):
+            return None
+        return next((pattern for pattern in self.patterns if fnmatchcase(upper, pattern.upper())), None)
+
+
 class ConfigurationSecurityModel(PlatformBaseModel):
     """Allow-lists of the store types that environment documents may use platform-wide for variables,
     secrets and features, and the key/value backends a workspace may use for step outputs. Each list is
     closed: anything not listed is rejected, and built-in types such as `constant` or `environment` must
-    be listed to be allowed. Omit a list for no restriction.
+    be listed to be allowed. Omit a list for no restriction. `disallowed_variable_keys` adds the key
+    patterns a variable or feature may not use.
 
     Design notes:
     Allow-lists restricting which store/backend types a `variable`/
@@ -112,6 +159,11 @@ class ConfigurationSecurityModel(PlatformBaseModel):
         "(docs/archive/cross-run-step-output-delivery.md). Named after the capability "
         "(KEY_VALUE), not the feature field, since it already has more than one "
         "planned consumer. None means unrestricted.",
+    )
+    disallowed_variable_keys: DisallowedVariableKeysModel | None = Field(
+        None,
+        description="Key patterns a variable or feature in any `kind: environment` document may not use, "
+        "because the name says it holds a secret, which belongs under `spec.secrets`. Omit for no check.",
     )
 
 

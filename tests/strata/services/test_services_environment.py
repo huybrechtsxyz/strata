@@ -548,6 +548,89 @@ def test_no_fields_set_on_security_means_fully_unrestricted():
 
 
 # ---------------------------------------------------------------------------
+# spec.security.disallowed_variable_keys (docs/design/build-time-value-categories.md,
+# "Secret-like variable keys")
+# ---------------------------------------------------------------------------
+
+
+def _environment_with_keys(*variables: tuple[str, str], features: tuple[str, ...] = ()) -> EnvironmentService:
+    service = EnvironmentService(
+        data={
+            "meta": {"name": "prd"},
+            "spec": {
+                "variables": [{"key": key, "store": store, "value": "x"} for key, store in variables],
+                "secrets": [{"key": "DB_PASSWORD", "store": "constant", "value": "x"}],
+                "features": [{"key": key, "store": "constant", "value": "true"} for key in features],
+            },
+        }
+    )
+    service.validate()
+    return service
+
+
+def _keys_rule(**rule) -> ConfigurationSecurityModel:
+    return _security(disallowed_variable_keys=rule)
+
+
+def test_a_variable_key_matching_a_pattern_is_warned_about_whatever_its_store():
+    service = _environment_with_keys(("API_TOKEN", "environment"), ("db_password", "constant"), ("REGION", "constant"))
+
+    result = service.validate_allowed_stores(_keys_rule(patterns=["*TOKEN*", "*PASSWORD*"]))
+
+    assert result.ok  # warn is the default
+    assert [(w.code, w.location) for w in result.warnings] == [
+        ("variable_key_looks_secret", "spec.variables[0].key"),
+        ("variable_key_looks_secret", "spec.variables[1].key"),  # case is ignored
+    ]
+    assert "'API_TOKEN' (store 'environment') matches '*TOKEN*'" in result.warnings[0].message
+    assert "spec.secrets" in result.warnings[0].message
+
+
+def test_deny_fails_validation():
+    result = _environment_with_keys(("API_TOKEN", "constant")).validate_allowed_stores(
+        _keys_rule(patterns=["*TOKEN*"], enforcement="deny")
+    )
+    assert [e.code for e in result.errors] == ["variable_key_looks_secret"]
+
+
+def test_an_exception_wins_over_a_pattern():
+    service = _environment_with_keys(("APPGW_CERT_SECRET_ID", "constant"), ("CLIENT_SECRET", "constant"))
+
+    result = service.validate_allowed_stores(_keys_rule(patterns=["*SECRET*"], exceptions=["*_secret_id"]))
+
+    assert [w.location for w in result.warnings] == ["spec.variables[1].key"]
+
+
+def test_a_feature_key_is_checked_too_and_a_secret_never_is():
+    """The secret `DB_PASSWORD` is where such a key belongs: it is never reported."""
+    result = _environment_with_keys(features=("USE_TOKEN_AUTH",)).validate_allowed_stores(
+        _keys_rule(patterns=["*TOKEN*", "*PASSWORD*"])
+    )
+    assert [w.location for w in result.warnings] == ["spec.features[0].key"]
+    assert result.warnings[0].message.startswith("Feature 'USE_TOKEN_AUTH'")
+
+
+def test_without_the_block_no_key_is_checked():
+    assert _environment_with_keys(("API_TOKEN", "constant")).validate_allowed_stores(_security()).messages() == []
+
+
+@pytest.mark.parametrize(
+    ("rule", "error"),
+    [
+        ({}, "patterns"),
+        ({"patterns": []}, "at least 1"),
+        ({"patterns": ["*TOKEN*", " "]}, "must not be empty"),
+        ({"patterns": ["*TOKEN*"], "exceptions": [""]}, "must not be empty"),
+        ({"patterns": ["*TOKEN*"], "enforcement": "block"}, "enforcement"),
+    ],
+)
+def test_the_rule_is_complete_or_refused(rule, error):
+    """Strata ships no pattern list: a block without patterns would check nothing."""
+    with pytest.raises(ValueError, match=error):
+        _keys_rule(**rule)
+
+
+# ---------------------------------------------------------------------------
 # ${deployment:KEY} (docs/design/deployment-tokens.md): skipped by the declared-keys
 # check, judged by `unresolved_deployment_tokens()` against the deployment
 # ---------------------------------------------------------------------------

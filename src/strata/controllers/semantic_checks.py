@@ -31,6 +31,7 @@ import re
 import ssl
 from collections.abc import Callable, Mapping
 from difflib import get_close_matches
+from fnmatch import fnmatchcase
 from itertools import combinations
 from pathlib import Path, PureWindowsPath
 from typing import Any, cast
@@ -1758,16 +1759,30 @@ def _check_environments(index: DocumentIndex) -> Diagnostics:
         configuration = cast(ConfigurationModel, configuration_entries[0].model)
         security = configuration.spec.security
 
+    keys: set[str] = set()
     for entry in index.all_of(PlatformKind.ENVIRONMENT):
         environment = entry.model
         if not isinstance(environment, EnvironmentModel):
             continue  # a partial template: checked in the environments that resolve through it
+        keys.update(variable.key for variable in environment.spec.variables or [])
+        keys.update(feature.key for feature in environment.spec.features or [])
         service = EnvironmentService.from_model(environment)
         diagnostics.extend(service.validate_artifact_references(artifact_names), source=str(entry.source))
         diagnostics.extend(service.validate_store_value_tokens(), source=str(entry.source))
         diagnostics.extend(service.validate_secret_store_values(), source=str(entry.source))
         if security is not None:
             diagnostics.extend(service.validate_allowed_stores(security), source=str(entry.source))
+
+    rule = security.disallowed_variable_keys if security is not None else None
+    for position, exception in enumerate(rule.exceptions or [] if rule is not None else []):
+        if not any(fnmatchcase(key.upper(), exception.upper()) for key in keys):
+            diagnostics.info(
+                f"Exception '{exception}' in spec.security.disallowed_variable_keys matches no variable or feature "
+                "key in any environment document; remove it, or correct it if it has a typo.",
+                location=f"spec.security.disallowed_variable_keys.exceptions[{position}]",
+                code="disallowed_variable_keys_unused_exception",
+                source=str(configuration_entries[0].source),
+            )
     return diagnostics
 
 
