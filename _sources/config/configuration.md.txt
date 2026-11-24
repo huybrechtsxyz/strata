@@ -12,9 +12,15 @@ logging, cost/drift tracking are not ported (only added when a v2 feature actual
 - `spec.audit` — the deployment audit trail, all optional:
   - `event_overrides` — switch event types on or off;
   - `sinks[]` — send the audit record to a git repository or an integration. A git sink names a `remote`, the
-    `branch` to push to, a folder `path`, and an `action` (`push`, the default; `commit`; `none`; see below);
+    `branch` to push to, a folder `path`, and an `action` (`push`, the default; `commit`; `none`; see below). It
+    receives `_manifest.json`, `_metrics.json` when it admits `deployment.measured`, the build's `resolved.yaml`
+    and `sbom.json`, and `_handover.md` when a deploy wrote it;
   - `require_remote_commits` — fail `deploy run` when the build does not record a clean commit for every
     repository it took files from (default `false`; see below)
+- `spec.security` — platform-wide rules for what environment and workspace documents may declare, all optional:
+  - `allowed_variable_stores`, `allowed_secret_stores`, `allowed_feature_stores`, `allowed_key_value_stores` —
+    closed lists of the store types allowed; omit a list for no restriction;
+  - `disallowed_variable_keys` — key patterns a variable or feature may not use (see below).
 
 ## Example
 
@@ -30,6 +36,36 @@ spec:
   topologies:
     - kubernetes
 ```
+
+## Keys a variable may not use
+
+A secret declared as a variable loses a secret's protection: its value is written in clear to
+`strata.auto.tfvars.json` and Terraform state, and with `store: constant` it sits in your git repository.
+`disallowed_variable_keys` lets the platform name the keys that give such a mistake away:
+
+```yaml
+spec:
+  security:
+    disallowed_variable_keys:
+      patterns: ["*PASSWORD*", "*PASSWD*", "*PWD*", "*SECRET*", "*TOKEN*", "*API_KEY*", "*PRIVATE_KEY*",
+                 "*CONNECTION_STRING*", "*CREDENTIAL*"]
+      exceptions: ["*_SECRET_ID", "*_SECRET_NAME", "*_SECRET_URI", "*_TOKEN_URL"]
+      enforcement: warn
+```
+
+- `patterns` (required, at least one) — globs (`*`, `?`, `[...]`) matched against the whole key, ignoring case.
+  Strata has no list of its own; the one above is a starting point. Avoid a bare `*KEY*`: it would match
+  `KEY_VAULT_NAME` and `PARTITION_KEY`.
+- `exceptions` — keys never reported, even when a pattern matches: typically a key that names or points at a
+  secret in a vault instead of holding it.
+- `enforcement` — `warn` (default) reports the key; `deny` fails `strata validate`, and with it `build run` and
+  `deploy run`.
+
+`strata validate` checks every `spec.variables[].key` and `spec.features[].key` in every environment document,
+whatever its store, and reports `variable_key_looks_secret`. The fix is to declare the key under `spec.secrets`,
+or, when it is not a secret, to add an exception here. An exception that matches no variable or feature key
+in any environment document is reported as information (`disallowed_variable_keys_unused_exception`). Without
+the block, no key is checked.
 
 ## Which commits were deployed
 

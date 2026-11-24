@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Configuration (kind: configuration) &mdash; strata 2.9.0 documentation</title>
+  <title>Configuration (kind: configuration) &mdash; strata 2.10.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=182a64a0"></script>
+      <script src="../_static/documentation_options.js?v=67920a36"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -78,6 +78,7 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#schema">Schema</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#example">Example</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#keys-a-variable-may-not-use">Keys a variable may not use</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#which-commits-were-deployed">Which commits were deployed</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#audit-files-in-a-repository-your-pipeline-checked-out">Audit files in a repository your pipeline checked out</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
@@ -152,9 +153,18 @@ logging, cost/drift tracking are not ported (only added when a v2 feature actual
 <ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">event_overrides</span></code> — switch event types on or off;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">sinks[]</span></code> — send the audit record to a git repository or an integration. A git sink names a <code class="docutils literal notranslate"><span class="pre">remote</span></code>, the
-<code class="docutils literal notranslate"><span class="pre">branch</span></code> to push to, a folder <code class="docutils literal notranslate"><span class="pre">path</span></code>, and an <code class="docutils literal notranslate"><span class="pre">action</span></code> (<code class="docutils literal notranslate"><span class="pre">push</span></code>, the default; <code class="docutils literal notranslate"><span class="pre">commit</span></code>; <code class="docutils literal notranslate"><span class="pre">none</span></code>; see below);</p></li>
+<code class="docutils literal notranslate"><span class="pre">branch</span></code> to push to, a folder <code class="docutils literal notranslate"><span class="pre">path</span></code>, and an <code class="docutils literal notranslate"><span class="pre">action</span></code> (<code class="docutils literal notranslate"><span class="pre">push</span></code>, the default; <code class="docutils literal notranslate"><span class="pre">commit</span></code>; <code class="docutils literal notranslate"><span class="pre">none</span></code>; see below). It
+receives <code class="docutils literal notranslate"><span class="pre">_manifest.json</span></code>, <code class="docutils literal notranslate"><span class="pre">_metrics.json</span></code> when it admits <code class="docutils literal notranslate"><span class="pre">deployment.measured</span></code>, the build’s <code class="docutils literal notranslate"><span class="pre">resolved.yaml</span></code>
+and <code class="docutils literal notranslate"><span class="pre">sbom.json</span></code>, and <code class="docutils literal notranslate"><span class="pre">_handover.md</span></code> when a deploy wrote it;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">require_remote_commits</span></code> — fail <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> when the build does not record a clean commit for every
 repository it took files from (default <code class="docutils literal notranslate"><span class="pre">false</span></code>; see below)</p></li>
+</ul>
+</li>
+<li><p><code class="docutils literal notranslate"><span class="pre">spec.security</span></code> — platform-wide rules for what environment and workspace documents may declare, all optional:</p>
+<ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">allowed_variable_stores</span></code>, <code class="docutils literal notranslate"><span class="pre">allowed_secret_stores</span></code>, <code class="docutils literal notranslate"><span class="pre">allowed_feature_stores</span></code>, <code class="docutils literal notranslate"><span class="pre">allowed_key_value_stores</span></code> —
+closed lists of the store types allowed; omit a list for no restriction;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">disallowed_variable_keys</span></code> — key patterns a variable or feature may not use (see below).</p></li>
 </ul>
 </li>
 </ul>
@@ -173,6 +183,35 @@ repository it took files from (default <code class="docutils literal notranslate
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kubernetes</span>
 </pre></div>
 </div>
+</section>
+<section id="keys-a-variable-may-not-use">
+<h2>Keys a variable may not use<a class="headerlink" href="#keys-a-variable-may-not-use" title="Link to this heading"></a></h2>
+<p>A secret declared as a variable loses a secret’s protection: its value is written in clear to
+<code class="docutils literal notranslate"><span class="pre">strata.auto.tfvars.json</span></code> and Terraform state, and with <code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">constant</span></code> it sits in your git repository.
+<code class="docutils literal notranslate"><span class="pre">disallowed_variable_keys</span></code> lets the platform name the keys that give such a mistake away:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">security</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">disallowed_variable_keys</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">patterns</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"*PASSWORD*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*PASSWD*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*PWD*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*SECRET*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*TOKEN*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*API_KEY*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*PRIVATE_KEY*"</span><span class="p p-Indicator">,</span>
+<span class="w">                 </span><span class="s">"*CONNECTION_STRING*"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*CREDENTIAL*"</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">exceptions</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"*_SECRET_ID"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*_SECRET_NAME"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*_SECRET_URI"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"*_TOKEN_URL"</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="nt">enforcement</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">warn</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">patterns</span></code> (required, at least one) — globs (<code class="docutils literal notranslate"><span class="pre">*</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, <code class="docutils literal notranslate"><span class="pre">[...]</span></code>) matched against the whole key, ignoring case.
+Strata has no list of its own; the one above is a starting point. Avoid a bare <code class="docutils literal notranslate"><span class="pre">*KEY*</span></code>: it would match
+<code class="docutils literal notranslate"><span class="pre">KEY_VAULT_NAME</span></code> and <code class="docutils literal notranslate"><span class="pre">PARTITION_KEY</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">exceptions</span></code> — keys never reported, even when a pattern matches: typically a key that names or points at a
+secret in a vault instead of holding it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">enforcement</span></code> — <code class="docutils literal notranslate"><span class="pre">warn</span></code> (default) reports the key; <code class="docutils literal notranslate"><span class="pre">deny</span></code> fails <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>, and with it <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> and
+<code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code>.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> checks every <code class="docutils literal notranslate"><span class="pre">spec.variables[].key</span></code> and <code class="docutils literal notranslate"><span class="pre">spec.features[].key</span></code> in every environment document,
+whatever its store, and reports <code class="docutils literal notranslate"><span class="pre">variable_key_looks_secret</span></code>. The fix is to declare the key under <code class="docutils literal notranslate"><span class="pre">spec.secrets</span></code>,
+or, when it is not a secret, to add an exception here. An exception that matches no variable or feature key
+in any environment document is reported as information (<code class="docutils literal notranslate"><span class="pre">disallowed_variable_keys_unused_exception</span></code>). Without
+the block, no key is checked.</p>
 </section>
 <section id="which-commits-were-deployed">
 <h2>Which commits were deployed<a class="headerlink" href="#which-commits-were-deployed" title="Link to this heading"></a></h2>

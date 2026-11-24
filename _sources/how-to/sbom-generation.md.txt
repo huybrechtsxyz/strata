@@ -126,7 +126,7 @@ the build. To make it fail, set the workspace's
 | `cve_policy` (workspace)                     | `build run` scans it with Trivy or Grype right after writing it and fails or warns on findings |
 | `image_gate_policy` (workspace)              | `deploy run` asks the security platform about every container image in it                      |
 | `strata policy findings --policy cve_policy` | Lists every CVE in it, allowlisted ones marked                                                 |
-| Deploy audit record                          | Stores its path, format, SHA-256 and component count                                           |
+| Deploy audit record                          | Stores its path, format, SHA-256 and component count, and keeps a copy that git sinks push     |
 
 The gates are set up in [security-gates.md](security-gates.md).
 

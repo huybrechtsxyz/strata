@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Environment (kind: environment) &mdash; strata 2.9.0 documentation</title>
+  <title>Environment (kind: environment) &mdash; strata 2.10.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=182a64a0"></script>
+      <script src="../_static/documentation_options.js?v=67920a36"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -270,6 +270,9 @@ in git.</p></li>
 <ul class="simple">
 <li><p>Keys are unique per store, not globally — <code class="docutils literal notranslate"><span class="pre">${var:X}</span></code> and <code class="docutils literal notranslate"><span class="pre">${secret:X}</span></code> are different tokens, so
 the same key name in both a variable and a secret is legitimate.</p></li>
+<li><p>A platform can refuse variable and feature keys that look like secrets (<code class="docutils literal notranslate"><span class="pre">DB_PASSWORD</span></code>, <code class="docutils literal notranslate"><span class="pre">API_TOKEN</span></code>): see
+<a class="reference internal" href="configuration.html#keys-a-variable-may-not-use"><span class="std std-ref">Keys a variable may not use</span></a>. Declare such a value under
+<code class="docutils literal notranslate"><span class="pre">spec.secrets</span></code>, which is never written to build output.</p></li>
 <li><p>Only <code class="docutils literal notranslate"><span class="pre">constant</span></code>/<code class="docutils literal notranslate"><span class="pre">environment</span></code>/<code class="docutils literal notranslate"><span class="pre">github</span></code>/<code class="docutils literal notranslate"><span class="pre">artifact</span></code> stores resolve to anything today — any other
 <code class="docutils literal notranslate"><span class="pre">store</span></code> value validates as a recognized name but has no runtime resolver behind it yet, same
 discipline as <a class="reference internal" href="workspace.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">provisioner</span></code></span></a>’s open <code class="docutils literal notranslate"><span class="pre">tool</span></code> field.</p></li>
