@@ -8,6 +8,8 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-11-25
+
 ### Added
 
 - **How-to: [Catch secrets declared as variables](../docs/how-to/catch-secrets-declared-as-variables.md).** A
@@ -1029,7 +1031,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.10.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.10.1...HEAD
+[2.10.1]: https://github.com/huybrechtsxyz/strata/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/huybrechtsxyz/strata/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/huybrechtsxyz/strata/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/huybrechtsxyz/strata/compare/v2.7.0...v2.8.0
