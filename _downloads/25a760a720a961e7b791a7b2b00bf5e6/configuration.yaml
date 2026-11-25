@@ -1,0 +1,18 @@
+apiVersion: strata.huybrechts.xyz/v2
+kind: configuration
+meta:
+  name: example-config
+spec:
+  # Plain document names — resolved by discovery, no file paths (ADR-0015).
+  providers:
+    - azure
+  additional_topologies: false
+  topologies:
+    - kubernetes
+  security:
+    # Keys that give away a secret declared as a variable (docs/how-to/catch-secrets-declared-as-variables.md).
+    disallowed_variable_keys:
+      patterns: ["*PASSWORD*", "*PASSWD*", "*SECRET*", "*TOKEN*", "*CREDENTIAL*", "*API_KEY*", "*PRIVATE_KEY*",
+                 "*ACCESS_KEY*", "*ACCOUNT_KEY*", "*CONNECTION_STRING*"]
+      exceptions: ["*_SECRET_ID"]   # a Key Vault secret's id points at the secret; it does not hold it
+      enforcement: warn

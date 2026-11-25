@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Configuration (kind: configuration) &mdash; strata 2.10.0 documentation</title>
+  <title>Configuration (kind: configuration) &mdash; strata 2.10.1 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=67920a36"></script>
+      <script src="../_static/documentation_options.js?v=c3ea8e2f"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -56,6 +56,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/catch-secrets-declared-as-variables.html">How To: Catch secrets declared as variables</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
@@ -201,7 +202,8 @@ closed lists of the store types allowed; omit a list for no restriction;</p></li
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">patterns</span></code> (required, at least one) — globs (<code class="docutils literal notranslate"><span class="pre">*</span></code>, <code class="docutils literal notranslate"><span class="pre">?</span></code>, <code class="docutils literal notranslate"><span class="pre">[...]</span></code>) matched against the whole key, ignoring case.
 Strata has no list of its own; the one above is a starting point. Avoid a bare <code class="docutils literal notranslate"><span class="pre">*KEY*</span></code>: it would match
-<code class="docutils literal notranslate"><span class="pre">KEY_VAULT_NAME</span></code> and <code class="docutils literal notranslate"><span class="pre">PARTITION_KEY</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">KEY_VAULT_NAME</span></code> and <code class="docutils literal notranslate"><span class="pre">PARTITION_KEY</span></code>. <a class="reference internal" href="../how-to/catch-secrets-declared-as-variables.html"><span class="std std-doc">Catch secrets declared as variables</span></a>
+gives a fuller list, the patterns to avoid, and how to roll it out from <code class="docutils literal notranslate"><span class="pre">warn</span></code> to <code class="docutils literal notranslate"><span class="pre">deny</span></code>.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">exceptions</span></code> — keys never reported, even when a pattern matches: typically a key that names or points at a
 secret in a vault instead of holding it.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">enforcement</span></code> — <code class="docutils literal notranslate"><span class="pre">warn</span></code> (default) reports the key; <code class="docutils literal notranslate"><span class="pre">deny</span></code> fails <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code>, and with it <code class="docutils literal notranslate"><span class="pre">build</span> <span class="pre">run</span></code> and
@@ -345,6 +347,16 @@ reports <code class="docutils literal notranslate"><span class="pre">audit_sink_
 the audit files, so the record still names what was built. But a sink <code class="docutils literal notranslate"><span class="pre">path</span></code> inside a <code class="docutils literal notranslate"><span class="pre">source_path</span></code> the build
 takes from the same remote would put audit files into the next build. <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> warns
 (<code class="docutils literal notranslate"><span class="pre">audit_sink_overlaps_source</span></code>).</p></li>
+<li><p><strong>Reading the records back.</strong> <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">status</span></code> and <code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">changes</span></code> do not read the pipeline’s
+checkout, which may be on another branch or missing on your machine. They clone the remote’s <code class="docutils literal notranslate"><span class="pre">url</span></code> at the
+sink’s <code class="docutils literal notranslate"><span class="pre">branch</span></code> into <code class="docutils literal notranslate"><span class="pre">.strata/audit-read/</span></code>, as for a remote with a <code class="docutils literal notranslate"><span class="pre">reference</span></code>, even though a <code class="docutils literal notranslate"><span class="pre">path</span></code> remote is
+otherwise <code class="docutils literal notranslate"><span class="pre">fetch:</span> <span class="pre">external</span></code>. With <code class="docutils literal notranslate"><span class="pre">commit</span></code> or <code class="docutils literal notranslate"><span class="pre">none</span></code>, they show a record only after the pipeline has pushed
+it; until the branch exists they report <code class="docutils literal notranslate"><span class="pre">audit_read_branch_missing</span></code> rather than another branch’s records.</p></li>
+<li><p><strong>Credentials for reading.</strong> Without an <code class="docutils literal notranslate"><span class="pre">integration</span></code> on the remote, the read uses your own git credentials.
+With one, name a deployment (<code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">audit</span> <span class="pre">status</span> <span class="pre">&lt;deployment&gt;</span></code>): its environments resolve the integration’s
+token or SSH key, as a deploy does for the push. In a pipeline that matters, because the pipeline’s
+credentials usually live only in its own checkout (<code class="docutils literal notranslate"><span class="pre">persistCredentials</span></code>), which the read does not use. Without
+a deployment the read falls back to ambient credentials, and a failure says how to use the integration.</p></li>
 </ul>
 <p>A GitOps step can write to a <code class="docutils literal notranslate"><span class="pre">path</span></code> remote the same way, with its own <code class="docutils literal notranslate"><span class="pre">branch</span></code> and <code class="docutils literal notranslate"><span class="pre">action</span></code>; see
 <a class="reference internal" href="solution.html#a-repository-your-pipeline-checked-out"><span class="std std-ref">solution.md</span></a>.</p>
