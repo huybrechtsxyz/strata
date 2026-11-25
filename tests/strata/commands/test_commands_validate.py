@@ -328,3 +328,27 @@ def test_shipped_example_solution_validates(runner, tmp_path):
     root = tmp_path / "config"
     shutil.copytree("config", root)
     assert _run(runner, root).exit_code == EXIT_SUCCESS
+
+
+@pytest.mark.skipif(not Path("config").exists(), reason="example config not present")
+@pytest.mark.slow
+def test_shipped_example_disallowed_variable_keys_flag_nothing(runner, tmp_path):
+    """The example's `disallowed_variable_keys` is the how-to's starting list
+    (docs/how-to/catch-secrets-declared-as-variables.md): it must not flag an
+    ordinary key, and its exception must still match one."""
+    root = tmp_path / "config"
+    shutil.copytree("config", root)
+    payload = json.loads(_run(runner, root, "--output", "json").output)
+    codes = {diagnostic["code"] for diagnostic in payload["diagnostics"]}
+    assert "variable_key_looks_secret" not in codes
+    assert "disallowed_variable_keys_unused_exception" not in codes
+
+    # The check really ran: without its exception, the Key Vault secret id is flagged.
+    configuration = root / "configuration.yaml"
+    text = configuration.read_text(encoding="utf-8")
+    assert 'exceptions: ["*_SECRET_ID"]' in text
+    configuration.write_text(text.replace('exceptions: ["*_SECRET_ID"]', "exceptions: []"), encoding="utf-8")
+    payload = json.loads(_run(runner, root, "--output", "json").output)
+    flagged = [d for d in payload["diagnostics"] if d["code"] == "variable_key_looks_secret"]
+    assert len(flagged) == 1
+    assert "APPGW_CERT_SECRET_ID" in flagged[0]["message"]

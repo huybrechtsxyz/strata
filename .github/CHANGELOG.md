@@ -8,6 +8,30 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-11-25
+
+### Added
+
+- **How-to: [Catch secrets declared as variables](../docs/how-to/catch-secrets-declared-as-variables.md).** A
+  starting list of `disallowed_variable_keys` patterns grouped by kind, the patterns to avoid (such as a bare
+  `*KEY*`), and how to roll the check out from `warn` to `deny`. The example solution in `config/` now uses the
+  same list.
+
+### Fixed
+
+- **`strata audit status` and `strata audit changes` read a sink on a remote with a `path`.** Since a git audit
+  sink could write into the pipeline's checkout, deploys wrote records there, but both commands refused the sink
+  ("remote has a 'path'"). They now clone the remote's `url` at the sink's `branch`, as for a remote with a
+  `reference`, and never read the pipeline's checkout. See
+  [Audit files in a repository your pipeline checked out](../docs/config/configuration.md#audit-files-in-a-repository-your-pipeline-checked-out).
+- **`strata audit status` and `changes` on a remote with `fetch: external`.** They waited for a read checkout
+  under `.strata/audit-read/` that nothing creates, and failed. The read now always fetches its own checkout.
+- **A sink branch that does not exist yet showed another branch's records.** The read fell back to the
+  remote's default branch. It now returns no records and reports `audit_read_branch_missing`.
+- **Reading an audit sink uses the remote's `integration`.** Name a deployment (`strata audit status
+  <deployment>`) and its environments resolve the integration's token or SSH key, as a deploy does for the
+  push. Without one, the read uses your own git credentials, and a failure says how to use the integration.
+
 ## [2.10.0] - 2026-11-24
 
 ### Added
@@ -1007,7 +1031,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.10.0...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.10.1...HEAD
+[2.10.1]: https://github.com/huybrechtsxyz/strata/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/huybrechtsxyz/strata/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/huybrechtsxyz/strata/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/huybrechtsxyz/strata/compare/v2.7.0...v2.8.0

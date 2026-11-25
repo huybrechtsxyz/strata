@@ -55,7 +55,8 @@ spec:
 
 - `patterns` (required, at least one) — globs (`*`, `?`, `[...]`) matched against the whole key, ignoring case.
   Strata has no list of its own; the one above is a starting point. Avoid a bare `*KEY*`: it would match
-  `KEY_VAULT_NAME` and `PARTITION_KEY`.
+  `KEY_VAULT_NAME` and `PARTITION_KEY`. [Catch secrets declared as variables](../how-to/catch-secrets-declared-as-variables.md)
+  gives a fuller list, the patterns to avoid, and how to roll it out from `warn` to `deny`.
 - `exceptions` — keys never reported, even when a pattern matches: typically a key that names or points at a
   secret in a vault instead of holding it.
 - `enforcement` — `warn` (default) reports the key; `deny` fails `strata validate`, and with it `build run` and
@@ -176,6 +177,16 @@ spec:
   the audit files, so the record still names what was built. But a sink `path` inside a `source_path` the build
   takes from the same remote would put audit files into the next build. `strata validate` warns
   (`audit_sink_overlaps_source`).
+- **Reading the records back.** `strata audit status` and `strata audit changes` do not read the pipeline's
+  checkout, which may be on another branch or missing on your machine. They clone the remote's `url` at the
+  sink's `branch` into `.strata/audit-read/`, as for a remote with a `reference`, even though a `path` remote is
+  otherwise `fetch: external`. With `commit` or `none`, they show a record only after the pipeline has pushed
+  it; until the branch exists they report `audit_read_branch_missing` rather than another branch's records.
+- **Credentials for reading.** Without an `integration` on the remote, the read uses your own git credentials.
+  With one, name a deployment (`strata audit status <deployment>`): its environments resolve the integration's
+  token or SSH key, as a deploy does for the push. In a pipeline that matters, because the pipeline's
+  credentials usually live only in its own checkout (`persistCredentials`), which the read does not use. Without
+  a deployment the read falls back to ambient credentials, and a failure says how to use the integration.
 
 A GitOps step can write to a `path` remote the same way, with its own `branch` and `action`; see
 [solution.md](solution.md#a-repository-your-pipeline-checked-out).

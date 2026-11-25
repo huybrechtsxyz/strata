@@ -59,6 +59,11 @@ def status_command(deployment: str | None, path: Path | None, output: str, quiet
     DEPLOYMENT with no records yet is not an error — the sink is reachable,
     there is just nothing recorded for it.
 
+    DEPLOYMENT also picks the credentials: when the sink's remote names an
+    integration, its token or SSH key is resolved from DEPLOYMENT's
+    environments, as a deploy does for the push. Without DEPLOYMENT the
+    sink is read with your own git credentials.
+
     \b
     Exit codes:
       0  the sink was read successfully, even if DEPLOYMENT has no records yet
@@ -197,6 +202,11 @@ def changes_command(
     Unlike 'audit status', every matching record is listed, not just the
     latest per deployment — the ISAE 3402 "enumerable sample over a
     period" ask this command exists for.
+
+    DEPLOYMENT also picks the credentials, as for 'audit status': when the
+    sink's remote names an integration, its token or SSH key is resolved
+    from DEPLOYMENT's environments. Without DEPLOYMENT the sink is read with
+    your own git credentials.
 
     \b
     Exit codes:

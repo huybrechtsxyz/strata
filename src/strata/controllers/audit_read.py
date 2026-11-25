@@ -19,20 +19,26 @@ naming exactly what to add, never after a slow, confusing clone/fetch
 attempt against nothing.
 """
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import cast
 
 from pydantic import ValidationError as PydanticValidationError
 
 from strata.controllers.audit_run import MANIFEST_FILENAME
 from strata.controllers.git_checkout import ensure_synced_checkout
 from strata.controllers.solution_context import SolutionContext
+from strata.controllers.value_controller import resolve_values
+from strata.integrations.errors import IntegrationError
+from strata.integrations.git_push import credential_env, credential_keys
 from strata.models.audit_manifest_model import ChangeReferenceModel, DeploymentManifestModel
 from strata.models.audit_model import AuditConfigModel, AuditGitSinkTargetModel
+from strata.models.auth_models import AuthenticationModel
 from strata.models.common_models import PlatformKind
 from strata.models.configuration_model import ConfigurationModel
+from strata.models.integration_model import IntegrationModel
 from strata.models.solution_model import RemoteType, SolutionModel
 from strata.utils import layout
 from strata.utils.diagnostics import Diagnostics
@@ -137,8 +143,19 @@ def resolve_readable_sink(audit_config: AuditConfigModel | None) -> AuditGitSink
     return git_sink
 
 
-def sync_read_checkout(root: Path, solution: SolutionModel | None, sink: AuditGitSinkTargetModel) -> Path:
+def sync_read_checkout(
+    root: Path,
+    solution: SolutionModel | None,
+    sink: AuditGitSinkTargetModel,
+    *,
+    auth: AuthenticationModel | None = None,
+    resolved_values: Mapping[str, str] | None = None,
+) -> Path | None:
     """Resolve `sink.remote`, then fetch/reset a dedicated read-only checkout.
+
+    Returns the checkout, or `None` when `sink.branch` does not exist on the
+    remote yet: nothing was pushed to the sink, and the remote's default
+    branch is not read in its place, since its files are not the sink's.
 
     By the time `audit_status()` calls this, `require_valid()` has already
     confirmed `sink.remote` names a real declared remote (`RemoteReference()`
@@ -149,9 +166,23 @@ def sync_read_checkout(root: Path, solution: SolutionModel | None, sink: AuditGi
     own `push_audit_files()` guards against at runtime), so it is a real,
     reachable case here.
 
+    The read checkout under `.strata/audit-read/` is strata's own, so this
+    always clones and fetches it, whatever `remote.fetch` says: `fetch:
+    external` names a checkout a pipeline places for builds, and nobody
+    places this one. A remote with a `path` is read the same way, from
+    `remote.url` at `sink.branch`; the pipeline's checkout is never read,
+    because it may be on another branch, behind the branch the records were
+    pushed to, or absent on a developer's machine (docs/design/
+    audit-commands.md, "A sink on a path remote").
+
+    Args:
+        auth: `remote.integration`'s authentication, or `None` for ambient
+            git credentials.
+        resolved_values: The values `auth`'s key references resolve to.
+
     Raises:
-        AuditReadError: The remote isn't declared, isn't a `git` remote, has a `path`, or
-            the clone/fetch/reset itself failed.
+        AuditReadError: The remote isn't declared, isn't a `git` remote, its
+            credentials don't resolve, or the clone/fetch/reset itself failed.
     """
     remotes_by_name = {remote.name: remote for remote in (solution.spec.remotes or [])} if solution else {}
     remote = remotes_by_name.get(sink.remote)
@@ -161,16 +192,89 @@ def sync_read_checkout(root: Path, solution: SolutionModel | None, sink: AuditGi
         raise AuditReadError(
             f"remote '{remote.name}' has type '{remote.type.value}', but a readable audit sink needs 'git'"
         )
-    if remote.path is not None:
-        raise AuditReadError(
-            f"remote '{remote.name}' has a 'path', which strata only reads where a pipeline put it; an audit sink "
-            "needs a 'reference' (the branch)"
-        )
 
     checkout_path = layout.audit_read_checkout_path(root, remote.name, sink.branch)
-    synced = ensure_synced_checkout(remote.url, sink.branch, checkout_path, fetch=remote.fetch)
+    try:
+        with credential_env(auth, resolved_values, None) as env:
+            synced = ensure_synced_checkout(remote.url, sink.branch, checkout_path, env=env, fallback_to_default=False)
+    except IntegrationError as exc:
+        raise AuditReadError(f"remote '{remote.name}': {exc}") from exc
     if not synced.success:
         raise AuditReadError(synced.detail)
+    return checkout_path if synced.branch_found else None
+
+
+def _read_credentials(
+    context: SolutionContext, sink: AuditGitSinkTargetModel, deployment: str | None
+) -> tuple[AuthenticationModel | None, Mapping[str, str] | None, str]:
+    """`(auth, resolved_values, hint)` for reading `sink.remote`.
+
+    The same lookup a deploy makes for the push (`audit_run.
+    _resolve_git_sink_auth()`): `remote.integration` -> its
+    `spec.authentication`, and a missing remote or integration means ambient
+    credentials. Its key references are resolved through `deployment`,
+    because values belong to a deployment's environments. Without a known
+    deployment the read uses ambient credentials, and `hint` says how to use
+    the integration's instead, for the error message should that read fail.
+
+    Raises:
+        AuditReadError: A key the authentication references has no value for
+            `deployment`.
+    """
+    solution = context.controller.solution
+    remote = next((r for r in (solution.spec.remotes or []) if r.name == sink.remote), None) if solution else None
+    if remote is None or not remote.integration:
+        return None, None, ""
+    entry = context.controller.index.get(PlatformKind.INTEGRATION, remote.integration)
+    if entry is None:
+        return None, None, ""
+    auth = cast(IntegrationModel, entry.model).spec.authentication
+    keys = credential_keys(auth)
+    if not keys:
+        return auth, None, ""
+    if deployment is None or context.controller.index.get(PlatformKind.DEPLOYMENT, deployment) is None:
+        return (
+            None,
+            None,
+            f"remote '{remote.name}' authenticates through integration '{remote.integration}', whose credentials "
+            "are resolved for a deployment: name one, for example 'strata audit status <deployment>', to use them "
+            "instead of your own git credentials",
+        )
+    result = resolve_values(context, deployment, list(keys))
+    missing = [key for key in keys if key not in result.values]
+    if missing:
+        detail = "; ".join(d.message for d in result.diagnostics.errors if d.location in keys)
+        raise AuditReadError(
+            f"remote '{remote.name}': could not resolve the credentials of integration '{remote.integration}' for "
+            f"deployment '{deployment}': {detail or 'no value for ' + ', '.join(missing)}"
+        )
+    return auth, {key: result.values[key] for key in keys}, ""
+
+
+def _read_checkout(
+    context: SolutionContext, sink: AuditGitSinkTargetModel, deployment: str | None, diagnostics: Diagnostics
+) -> Path | None:
+    """`sync_read_checkout()` with the remote's credentials; `None`, with an
+    info diagnostic, when the sink's branch does not exist yet.
+
+    Raises:
+        AuditReadError: The sink's remote can't be synced.
+    """
+    auth, resolved_values, hint = _read_credentials(context, sink, deployment)
+    try:
+        checkout_path = sync_read_checkout(
+            context.root, context.controller.solution, sink, auth=auth, resolved_values=resolved_values
+        )
+    except AuditReadError as exc:
+        if hint:
+            raise AuditReadError(f"{exc} ({hint})") from exc
+        raise
+    if checkout_path is None:
+        diagnostics.info(
+            f"branch '{sink.branch}' does not exist on remote '{sink.remote}' yet: nothing has been pushed to this "
+            "audit sink. With `action: commit` or `none`, a record appears once the pipeline pushes it.",
+            code="audit_read_branch_missing",
+        )
     return checkout_path
 
 
@@ -375,9 +479,11 @@ def audit_status(context: SolutionContext, deployment: str | None) -> tuple[list
     audit_config = configuration.spec.audit if configuration is not None else None
 
     sink = resolve_readable_sink(audit_config)
-    checkout_path = sync_read_checkout(context.root, context.controller.solution, sink)
-
     diagnostics = Diagnostics()
+    checkout_path = _read_checkout(context, sink, deployment, diagnostics)
+    if checkout_path is None:
+        return [], diagnostics
+
     records = list_latest_per_deployment(checkout_path, sink, deployment=deployment, diagnostics=diagnostics)
     return records, diagnostics
 
@@ -411,9 +517,11 @@ def audit_changes(
     audit_config = configuration.spec.audit if configuration is not None else None
 
     sink = resolve_readable_sink(audit_config)
-    checkout_path = sync_read_checkout(context.root, context.controller.solution, sink)
-
     diagnostics = Diagnostics()
+    checkout_path = _read_checkout(context, sink, deployment, diagnostics)
+    if checkout_path is None:
+        return [], diagnostics
+
     records = list_manifests_in_range(
         checkout_path,
         sink,

@@ -78,6 +78,29 @@ def test_branch_not_yet_on_remote_falls_back_to_origin_head(tmp_path: Path, monk
     assert result.success is True
 
 
+def test_branch_not_on_remote_without_fallback_reports_it_and_does_not_reset(tmp_path: Path, monkeypatch):
+    """A read must not show the default branch's files as the missing branch's."""
+    captured: list[list[str]] = []
+
+    def _fake_run_command(args, *, cwd=None, env=None, timeout=60, input=None, line_callback=None):
+        captured.append(list(args))
+        if args[:3] == ["git", "rev-parse", "--verify"] and args[3] == "origin/missing-branch":
+            return CommandResult(returncode=1, stdout="", stderr="fatal: unknown revision")
+        return CommandResult(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(git_checkout_module, "run_command", _fake_run_command)
+    checkout_path = tmp_path / "checkout"
+    checkout_path.mkdir()
+
+    result = ensure_synced_checkout(
+        "https://example.com/org/repo.git", "missing-branch", checkout_path, fallback_to_default=False
+    )
+
+    assert (result.success, result.branch_found) == (True, False)
+    assert not any(args[:2] == ["git", "reset"] for args in captured)
+    assert ["git", "rev-parse", "--verify", "origin/HEAD"] not in captured
+
+
 def test_completely_empty_remote_succeeds_without_a_reset(tmp_path: Path, monkeypatch):
     """No commits exist anywhere upstream yet — nothing to reset to, but not a failure."""
 

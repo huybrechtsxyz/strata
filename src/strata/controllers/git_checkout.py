@@ -44,6 +44,8 @@ class SyncResult:
 
     success: bool
     detail: str = ""
+    #: `False` when `branch` does not exist on the remote and the caller asked for no fallback.
+    branch_found: bool = True
 
 
 def ensure_synced_checkout(
@@ -53,6 +55,7 @@ def ensure_synced_checkout(
     *,
     fetch: RemoteFetch = RemoteFetch.STRATA,
     env: Mapping[str, str] | None = None,
+    fallback_to_default: bool = True,
 ) -> SyncResult:
     """Clone if absent, then always fetch + reset to a known-good remote ref —
     `origin/<branch>` when it already exists, else the remote's default branch.
@@ -76,6 +79,11 @@ def ensure_synced_checkout(
             (`clone`/`fetch`) — `remote.integration`'s resolved credentials,
             via `strata.integrations.git_push.credential_env()`. `None`
             (default) preserves today's ambient-only behaviour exactly.
+        fallback_to_default: When `branch` does not exist on the remote,
+            reset to the remote's default branch (`True`, what a push wants:
+            its first push creates `branch` from there) or leave the checkout
+            alone and report `branch_found=False` (what a read wants: the
+            default branch's files are not `branch`'s).
     """
     if not checkout_path.exists():
         if fetch is RemoteFetch.EXTERNAL:
@@ -99,6 +107,8 @@ def ensure_synced_checkout(
         ["git", "rev-parse", "--verify", reset_ref], cwd=checkout_path, env=env, timeout=_GIT_TIMEOUT
     )
     if not verify_result.is_successful:
+        if not fallback_to_default:
+            return SyncResult(True, branch_found=False)
         # branch doesn't exist upstream yet — fall back to the remote's default branch
         default_verify = run_command(
             ["git", "rev-parse", "--verify", "origin/HEAD"], cwd=checkout_path, env=env, timeout=_GIT_TIMEOUT
