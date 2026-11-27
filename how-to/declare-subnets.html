@@ -1,0 +1,399 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How To: Declare subnets by size and create them where they belong &mdash; strata 2.11.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=1647406f"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="How To: Stream deploy run Output Live (--follow)" href="deploy-run-streaming.html" />
+    <link rel="prev" title="How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)" href="composite-variable-fragments.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            strata
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../README.html">strata</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../GLOSSARY.html">Strata Glossary</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">How-To Guides:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="aikido-safe-chain.html">How To: Install strata in a pipeline that uses Aikido Safe Chain</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-certificates.html">How To: Get a TLS Certificate onto an Azure Application Gateway / WAF</a></li>
+<li class="toctree-l1"><a class="reference internal" href="azure-private-dns-zones.html">How To: Model Azure Private DNS Zones (VNet Links + Externally-Owned Zones)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="catch-secrets-declared-as-variables.html">How To: Catch secrets declared as variables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
+<li class="toctree-l1"><a class="reference internal" href="composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">How To: Declare subnets by size and create them where they belong</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#declare-the-network-and-its-core-subnets">1. Declare the network and its core subnets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#let-a-workload-add-its-own-subnets">2. Let a workload add its own subnets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#read-what-validation-checks">3. Read what validation checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#create-each-subnet-in-the-terraform-that-owns-it">4. Create each subnet in the Terraform that owns it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#choose-the-address-of-a-sized-subnet">5. Choose the address of a sized subnet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#grow-the-address-space">6. Grow the address space</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#firewall-rules-for-a-sized-subnet">7. Firewall rules for a sized subnet</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
+<li class="toctree-l1"><a class="reference internal" href="generate-per-instance-terraform-blocks.html">How To: Generate Repeated Per-Instance Terraform Blocks (Providers/Modules) From One Composite Value</a></li>
+<li class="toctree-l1"><a class="reference internal" href="migrate-v1-workspace-topology-provisioning.html">How To: Migrate a v1 <code class="docutils literal notranslate"><span class="pre">workspace.yaml</span></code> (Topology/Provisioning Decoupling)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parameterised-deployment-bases.html">How To: Write one deployment base for many spokes with parameter sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="sbom-generation.html">How To: Use the SBOM (CycloneDX)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="script-provisioner.html">How To: Run a Script as a Pipeline Step (<code class="docutils literal notranslate"><span class="pre">tool:</span> <span class="pre">script</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="security-gates.html">How To: Gate deploys on security findings</a></li>
+<li class="toctree-l1"><a class="reference internal" href="share-version-pins-across-workspaces.html">How To: Share version pins between products in one ring</a></li>
+<li class="toctree-l1"><a class="reference internal" href="structured-properties-with-attributeconfig.html">How To: Model your own structured data in <code class="docutils literal notranslate"><span class="pre">properties</span></code> and enforce its shape</a></li>
+<li class="toctree-l1"><a class="reference internal" href="verify-a-deploy.html">How To: Check That a Deployed App Actually Works</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Files:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../config/readme.html">Configuration Files</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/solution.html">Solution (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">solution</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/configuration.html">Configuration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">configuration</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/provider.html">Provider (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">provider</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/providerconfig.html">ProviderConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">providerconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/resource.html">Resource (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">resource</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/network.html">Network (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">network</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/firewall.html">Firewall (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">firewall</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/dns.html">DNS (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">dns</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/topologyconfig.html">TopologyConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">topologyconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/attributeconfig.html">AttributeConfig (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">attributeconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/workspace.html">Workspace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">workspace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/module.html">Module (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">module</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/namespace.html">Namespace (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">namespace</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/tenant.html">Tenant (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">tenant</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/environment.html">Environment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">environment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/deployment.html">Deployment (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">deployment</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/version.html">Version (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">version</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/artifact.html">Artifact (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">artifact</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/asset.html">Asset (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">asset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/parameterset.html">Parameter set (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">parameterset</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../config/integration.html">Integration (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">integration</span></code>)</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Integrations:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/README.html">Integrations — How to Configure Each One</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/infisical.html">Infisical (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">infisical</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-keyvault.html">Azure Key Vault (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-keyvault</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/azure-appconfig.html">Azure App Configuration (<code class="docutils literal notranslate"><span class="pre">store:</span> <span class="pre">azure-appconfig</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/git.html">Git (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integrations/chart-registries.html">Chart registries (<code class="docutils literal notranslate"><span class="pre">capabilities:</span> <span class="pre">[sources]</span></code>)</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">strata</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">How To: Declare subnets by size and create them where they belong</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/how-to/declare-subnets.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="how-to-declare-subnets-by-size-and-create-them-where-they-belong">
+<h1>How To: Declare subnets by size and create them where they belong<a class="headerlink" href="#how-to-declare-subnets-by-size-and-create-them-where-they-belong" title="Link to this heading"></a></h1>
+<p>A shared network usually has one owner — a network repository that declares the virtual network, its
+address ranges and the core subnets (firewall, gateway, AKS) — while the workloads deployed into it
+keep needing subnets of their own. Writing every subnet’s address by hand means re-doing subnet math
+for each new workload and editing the network owner’s document every time.</p>
+<p>Since 2.11.0 a subnet can give a <strong>size</strong> instead of an address, and a workload can add its own
+sized subnets without touching the network document. Strata <strong>declares</strong>; it never allocates:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p></p></th>
+<th class="head"><p>Who</p></th>
+<th class="head"><p>What</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Where</p></td>
+<td><p>strata configuration</p></td>
+<td><p>the address ranges (<code class="docutils literal notranslate"><span class="pre">address_space</span></code>), and which IPAM is used (<code class="docutils literal notranslate"><span class="pre">ipam</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p>How</p></td>
+<td><p>strata configuration</p></td>
+<td><p>the networks, their subnets, each subnet’s size or fixed address, and who creates it</p></td>
+</tr>
+<tr class="row-even"><td><p>The address of a sized subnet</p></td>
+<td><p>your provisioner code, or an IPAM</p></td>
+<td><p>chosen at deploy, from what really exists in the network</p></td>
+</tr>
+</tbody>
+</table>
+<p>The full design and its reasoning: <span class="xref myst">subnet-addressing.md</span>.</p>
+<section id="declare-the-network-and-its-core-subnets">
+<span id="1-declare-the-network-and-its-core-subnets"></span><h2>1. Declare the network and its core subnets<a class="headerlink" href="#declare-the-network-and-its-core-subnets" title="Link to this heading"></a></h2>
+<p>In the network owner’s <a class="reference internal" href="../config/network.html"><span class="std std-doc">network</span></a> document, give each subnet either a fixed
+<code class="docutils literal notranslate"><span class="pre">cidr</span></code> or a <code class="docutils literal notranslate"><span class="pre">prefix_length</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">apiVersion</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">strata.huybrechts.xyz/v2</span>
+<span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">network</span>
+<span class="nt">meta</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main-network</span>
+<span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">networks</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vnet-main</span>
+<span class="w">      </span><span class="nt">address_space</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"${var:vnet_space}"</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># per environment</span>
+<span class="w">      </span><span class="nt">subnets</span><span class="p">:</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">firewall</span>
+<span class="w">          </span><span class="nt">cidr</span><span class="p">:</span><span class="w"> </span><span class="s">"${var:fw_subnet}"</span><span class="w">           </span><span class="c1"># fixed: agreed with the network team</span>
+<span class="w">          </span><span class="nt">configuration</span><span class="p">:</span>
+<span class="w">            </span><span class="nt">azure_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">AzureFirewallSubnet</span><span class="w">  </span><span class="c1"># see step 4</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aks-nodes</span>
+<span class="w">          </span><span class="nt">prefix_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">25</span><span class="w">                  </span><span class="c1"># a /25, address chosen at deploy</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aks-kubeapi</span>
+<span class="w">          </span><span class="nt">prefix_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">28</span>
+</pre></div>
+</div>
+<p>If an IPAM hands out the addresses, say which one with <code class="docutils literal notranslate"><span class="pre">ipam</span></code>. Strata does not call it; it passes the
+settings to your provisioner code:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vnet-spoke</span>
+<span class="w">      </span><span class="nt">ipam</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-avnm</span><span class="w">                     </span><span class="c1"># a free name your code recognises</span>
+<span class="w">        </span><span class="nt">pool</span><span class="p">:</span><span class="w"> </span><span class="s">"${var:ipam_pool_id}"</span>
+<span class="w">        </span><span class="nt">prefix_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">22</span>
+</pre></div>
+</div>
+<p>A network needs <code class="docutils literal notranslate"><span class="pre">address_space</span></code>, <code class="docutils literal notranslate"><span class="pre">ipam</span></code>, or both. With both, <code class="docutils literal notranslate"><span class="pre">address_space</span></code> is the range the IPAM
+manages, and strata uses it for its checks.</p>
+</section>
+<section id="let-a-workload-add-its-own-subnets">
+<span id="2-let-a-workload-add-its-own-subnets"></span><h2>2. Let a workload add its own subnets<a class="headerlink" href="#let-a-workload-add-its-own-subnets" title="Link to this heading"></a></h2>
+<p>A workload declares its subnets in its own <a class="reference internal" href="../config/workspace.html"><span class="std std-doc">workspace</span></a>, against a network it
+lists in <code class="docutils literal notranslate"><span class="pre">networks</span></code>. The network document stays untouched:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">spec</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">networks</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">main-network</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">subnets</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">network</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">main-network</span>
+<span class="w">      </span><span class="nt">virtual_network</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vnet-main</span><span class="w">  </span><span class="c1"># which network in the document; optional if it has only one</span>
+<span class="w">      </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app1-pe</span><span class="w">               </span><span class="c1"># prefix with the workload name: subnet names are unique per vnet</span>
+<span class="w">      </span><span class="nt">prefix_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">27</span>
+<span class="w">  </span><span class="nt">resources</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app1-storage</span>
+<span class="w">      </span><span class="nt">resource</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">storage-account</span>
+<span class="w">      </span><span class="nt">subnet</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt"> network</span><span class="p">:</span><span class="w"> </span><span class="nv">main-network</span><span class="p p-Indicator">,</span><span class="nt"> subnet</span><span class="p">:</span><span class="w"> </span><span class="nv">app1-pe</span><span class="w"> </span><span class="p p-Indicator">}</span>
+</pre></div>
+</div>
+<p>A workload subnet only takes a <code class="docutils literal notranslate"><span class="pre">prefix_length</span></code>. Fixed addresses belong to the network owner.</p>
+</section>
+<section id="read-what-validation-checks">
+<span id="3-read-what-validation-checks"></span><h2>3. Read what validation checks<a class="headerlink" href="#read-what-validation-checks" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">strata</span> <span class="pre">validate</span></code> catches what can be known before deploy:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Problem</p></th>
+<th class="head"><p>Message or code</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>A subnet with both <code class="docutils literal notranslate"><span class="pre">cidr</span></code> and <code class="docutils literal notranslate"><span class="pre">prefix_length</span></code>, or neither</p></td>
+<td><p>“needs exactly one of ‘cidr’ or ‘prefix_length’”</p></td>
+</tr>
+<tr class="row-odd"><td><p>A network with neither <code class="docutils literal notranslate"><span class="pre">address_space</span></code> nor <code class="docutils literal notranslate"><span class="pre">ipam</span></code></p></td>
+<td><p>“needs ‘address_space’, ‘ipam’, or both”</p></td>
+</tr>
+<tr class="row-even"><td><p>Fixed subnets that overlap, or fall outside the address space</p></td>
+<td><p>as before</p></td>
+</tr>
+<tr class="row-odd"><td><p>A size larger than every literal range (or the <code class="docutils literal notranslate"><span class="pre">ipam.prefix_length</span></code> block), or for the wrong IP version</p></td>
+<td><p>“does not fit within any address space” / <code class="docutils literal notranslate"><span class="pre">subnet_does_not_fit</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>All subnets together need more addresses than the literal ranges (or the IPAM block) hold</p></td>
+<td><p>“need N addresses, but … holds only M” / <code class="docutils literal notranslate"><span class="pre">subnet_capacity_exceeded</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>A workspace subnet for a network not in <code class="docutils literal notranslate"><span class="pre">networks</span></code></p></td>
+<td><p>“references undefined network”</p></td>
+</tr>
+<tr class="row-even"><td><p>A <code class="docutils literal notranslate"><span class="pre">virtual_network</span></code> the document doesn’t have, or none when it has several</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">unregistered_virtual_network</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>A workspace subnet reusing a subnet name the network document declares, in any of its networks</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">subnet_name_taken</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">${value:…subnets.&lt;name&gt;.cidr}</span></code> on a sized subnet</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">value_reference_no_address</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>The range checks only run when the ranges are literal, or, for a network with only an IPAM, when
+<code class="docutils literal notranslate"><span class="pre">ipam.prefix_length</span></code> is given. With <code class="docutils literal notranslate"><span class="pre">address_space:</span> <span class="pre">[&quot;${var:vnet_space}&quot;]</span></code>, as above, strata cannot
+count addresses, so put the same checks in your Terraform (step 5).</p>
+<p>Capacity is a “certainly won’t fit” check. Other workloads’ subnets aren’t in your solution, so a
+network that passes can still be full at deploy.</p>
+</section>
+<section id="create-each-subnet-in-the-terraform-that-owns-it">
+<span id="4-create-each-subnet-in-the-terraform-that-owns-it"></span><h2>4. Create each subnet in the Terraform that owns it<a class="headerlink" href="#create-each-subnet-in-the-terraform-that-owns-it" title="Link to this heading"></a></h2>
+<p>Every subnet in <code class="docutils literal notranslate"><span class="pre">strata.networks</span></code> says who declared it, and carries a fixed <code class="docutils literal notranslate"><span class="pre">cidr</span></code> or a
+<code class="docutils literal notranslate"><span class="pre">prefix_length</span></code> (the other is <code class="docutils literal notranslate"><span class="pre">null</span></code>). <code class="docutils literal notranslate"><span class="pre">ipam</span></code> is always present; its <code class="docutils literal notranslate"><span class="pre">type</span></code> is <code class="docutils literal notranslate"><span class="pre">null</span></code> when the
+network names no IPAM. The network deployment creates the subnets with <code class="docutils literal notranslate"><span class="pre">declared_by</span> <span class="pre">=</span> <span class="pre">&quot;network&quot;</span></code>,
+and a workload creates its own, <code class="docutils literal notranslate"><span class="pre">declared_by</span> <span class="pre">=</span> <span class="pre">&quot;workspace&quot;</span></code>. Each still sees the other subnets, for
+references and NSG or firewall rules:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>locals {
+  vnet = var.strata.networks["main-network"].networks["vnet-main"]
+
+  # The network deployment uses "network"; a workload uses "workspace".
+  mine = { for name, s in local.vnet.subnets : name =&gt; s if s.declared_by == "network" }
+
+  fixed = { for name, s in local.mine : name =&gt; s if s.cidr != null }
+  sized = { for name, s in local.mine : name =&gt; s if s.prefix_length != null }
+
+  # Strata names are lowercase; the subnet's configuration maps one to the name Azure requires.
+  azure_name = { for name, s in local.mine : name =&gt; try(s.configuration.azure_name, name) }
+
+  uses_ipam = local.vnet.ipam.type != null
+}
+
+resource "azurerm_subnet" "fixed" {
+  for_each             = local.fixed
+  name                 = local.azure_name[each.key]
+  virtual_network_name = var.vnet_name
+  resource_group_name  = var.vnet_resource_group
+  address_prefixes     = [each.value.cidr]
+}
+</pre></div>
+</div>
+<p>Two rules for the network deployment:</p>
+<ul class="simple">
+<li><p><strong>Create subnets as separate <code class="docutils literal notranslate"><span class="pre">azurerm_subnet</span></code> resources</strong>, never as inline <code class="docutils literal notranslate"><span class="pre">subnet</span></code> blocks on
+<code class="docutils literal notranslate"><span class="pre">azurerm_virtual_network</span></code>. With inline blocks the vnet deploy deletes every subnet it doesn’t
+declare, including the ones workloads created.</p></li>
+<li><p><strong>Put the vnet and its subnets in two execution steps</strong>, the subnets’ step depending on the vnet’s,
+when your subnet code reads the existing vnet (step 5): on the first deploy that vnet doesn’t exist
+yet.</p></li>
+</ul>
+<p>A workload’s identity needs read access on the vnet and permission to create subnets in it, such as
+Network Contributor on the vnet or a custom role.</p>
+</section>
+<section id="choose-the-address-of-a-sized-subnet">
+<span id="5-choose-the-address-of-a-sized-subnet"></span><h2>5. Choose the address of a sized subnet<a class="headerlink" href="#choose-the-address-of-a-sized-subnet" title="Link to this heading"></a></h2>
+<p><strong>With an IPAM</strong>, read <code class="docutils literal notranslate"><span class="pre">local.vnet.ipam</span></code> (<code class="docutils literal notranslate"><span class="pre">type</span></code>, <code class="docutils literal notranslate"><span class="pre">pool</span></code>, <code class="docutils literal notranslate"><span class="pre">prefix_length</span></code>, <code class="docutils literal notranslate"><span class="pre">configuration</span></code>) and ask
+the IPAM for a block of <code class="docutils literal notranslate"><span class="pre">prefix_length</span></code>, using that IPAM’s own Terraform provider or resources. The IPAM
+records the allocation, so the address stays the same on every deploy, and it sees every workload’s
+subnets.</p>
+<p><strong>Without an IPAM</strong>, the existing vnet is the register of what is taken. The reference module
+<a class="reference download internal" download="" href="../_downloads/f9a1a51443f8d7bc783faaeedcee6fb6/main.tf"><span class="xref download myst">examples/terraform/azure-subnets</span></a> does this for Azure;
+copy it into your Terraform and call it from both the network deployment and each workload:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>module "subnets" {
+  source              = "./azure-subnets"
+  network             = var.strata.networks["main-network"].networks["vnet-main"]
+  declared_by         = "workspace"          # "network" in the network deployment
+  vnet_name           = "vnet-main-prd"
+  resource_group_name = "rg-network-prd"
+}
+</pre></div>
+</div>
+<p>It:</p>
+<ol class="arabic simple">
+<li><p>reads the vnet’s current subnets;</p></li>
+<li><p>keeps the address of every subnet that already exists, by name, so later deploys don’t move it;</p></li>
+<li><p>gives each new subnet the first free block of its size, largest first, walking the ranges in order
+and skipping every existing and fixed subnet;</p></li>
+<li><p>sets <code class="docutils literal notranslate"><span class="pre">lifecycle</span> <span class="pre">{</span> <span class="pre">ignore_changes</span> <span class="pre">=</span> <span class="pre">[address_prefixes]</span> <span class="pre">}</span></code>, so a live subnet never moves;</p></li>
+<li><p>fails with a clear message when no block is free (“Ask the network owner to add a range to
+address_space”), when a fixed <code class="docutils literal notranslate"><span class="pre">cidr</span></code> fits no range, or when a network has no <code class="docutils literal notranslate"><span class="pre">address_space</span></code>.</p></li>
+</ol>
+<p>Limits: IPv4 only, and at most 10 new subnets per network in one apply (apply in batches, or extend
+the chain in <code class="docutils literal notranslate"><span class="pre">placement/main.tf</span></code>). Requires Terraform 1.6 or later and azurerm 4 or later. Add your
+subnets’ own settings (delegations, service endpoints) from <code class="docutils literal notranslate"><span class="pre">configuration</span></code> in the module’s
+<code class="docutils literal notranslate"><span class="pre">azurerm_subnet</span></code>.</p>
+<p>Downstream code (NSGs, firewall rules) reads the real addresses from the module’s <code class="docutils literal notranslate"><span class="pre">subnets</span></code> output,
+never from a computed local.</p>
+<p>Two workloads deploying into the same vnet at the same moment can pick the same free block. Azure
+rejects the second subnet as overlapping, and running that deploy again places it elsewhere.</p>
+</section>
+<section id="grow-the-address-space">
+<span id="6-grow-the-address-space"></span><h2>6. Grow the address space<a class="headerlink" href="#grow-the-address-space" title="Link to this heading"></a></h2>
+<p>When a network is full, the network owner appends a range to <code class="docutils literal notranslate"><span class="pre">address_space</span></code> (or grows the IPAM pool).
+Existing subnets keep their addresses, and new ones can land in the new range. A workload never grows
+the address space itself.</p>
+</section>
+<section id="firewall-rules-for-a-sized-subnet">
+<span id="7-firewall-rules-for-a-sized-subnet"></span><h2>7. Firewall rules for a sized subnet<a class="headerlink" href="#firewall-rules-for-a-sized-subnet" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">${value:network.main-network.spec.networks.vnet-main.subnets.app1-pe.cidr}</span></code> only works for a subnet
+with a fixed <code class="docutils literal notranslate"><span class="pre">cidr</span></code>. A sized subnet’s address exists only after deploy, so a rule for it must take the
+address from the provisioner code: the subnet resource’s <code class="docutils literal notranslate"><span class="pre">address_prefixes</span></code>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="composite-variable-fragments.html" class="btn btn-neutral float-left" title="How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="deploy-run-streaming.html" class="btn btn-neutral float-right" title="How To: Stream deploy run Output Live (--follow)" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Huybrechts XYZ.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

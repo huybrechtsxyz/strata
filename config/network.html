@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Network (kind: network) &mdash; strata 2.10.1 documentation</title>
+  <title>Network (kind: network) &mdash; strata 2.11.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=03e43079" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -14,7 +14,7 @@
   
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=c3ea8e2f"></script>
+      <script src="../_static/documentation_options.js?v=1647406f"></script>
       <script src="../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
       <script src="../_static/toggleprompt.js?v=cec9bd37"></script>
@@ -59,6 +59,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../how-to/catch-secrets-declared-as-variables.html">How To: Catch secrets declared as variables</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/ci-deploy-pipeline.html">How To: Run strata in a CI pipeline</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/composite-variable-fragments.html">How To: Compose One Variable’s Value From Several Files (Per-Customer/Per-Ring Fragments)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../how-to/declare-subnets.html">How To: Declare subnets by size and create them where they belong</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deploy-run-streaming.html">How To: Stream <code class="docutils literal notranslate"><span class="pre">deploy</span> <span class="pre">run</span></code> Output Live (<code class="docutils literal notranslate"><span class="pre">--follow</span></code>)</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/deployment-handover.html">How To: Hand Over a Deployment Without Sharing Secrets</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../how-to/environment-and-tenant-bases.html">How To: Give every customer a tenant and an environment from shared bases</a></li>
@@ -142,12 +143,24 @@
 independently-tagged networks.</p>
 <section id="schema">
 <h2>Schema<a class="headerlink" href="#schema" title="Link to this heading"></a></h2>
-<ul class="simple">
+<ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">spec.networks[]</span></code>, each:</p>
 <ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">name</span></code> — unique within the spec</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">address_space[]</span></code> — one or more CIDRs (literal, or <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code> tokens)</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">subnets[]</span></code> — each <code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">description,</span> <span class="pre">cidr}</span></code>; CIDR is also a Value binding</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">address_space[]</span></code> — one or more CIDRs (literal, or <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code> tokens).
+Optional when <code class="docutils literal notranslate"><span class="pre">ipam</span></code> is given; a network needs <code class="docutils literal notranslate"><span class="pre">address_space</span></code>, <code class="docutils literal notranslate"><span class="pre">ipam</span></code>, or both</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ipam</span></code> — which IPAM allocates this network’s addresses: <code class="docutils literal notranslate"><span class="pre">type</span></code> (a free name such as <code class="docutils literal notranslate"><span class="pre">azure-avnm</span></code>
+or <code class="docutils literal notranslate"><span class="pre">netbox</span></code>), and optional <code class="docutils literal notranslate"><span class="pre">pool</span></code> (may hold tokens), <code class="docutils literal notranslate"><span class="pre">prefix_length</span></code> and <code class="docutils literal notranslate"><span class="pre">configuration</span></code>. Strata
+does not call the IPAM; it passes these settings to your provisioner code</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">subnets[]</span></code> — each <code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">description,</span> <span class="pre">configuration,</span> <span class="pre">custom}</span></code> with exactly one of:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">cidr</span></code> — a fixed address (a literal or a Value binding), as before</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">prefix_length</span></code> — a size (<code class="docutils literal notranslate"><span class="pre">25</span></code> is a /25); your provisioner code or an IPAM chooses the address
+at deploy</p></li>
+</ul>
+<p>May be empty, for example when every subnet is declared by the workloads that use the network
+(see <a class="reference internal" href="workspace.html"><span class="std std-doc">workspace</span></a> <code class="docutils literal notranslate"><span class="pre">spec.subnets[]</span></code>)</p>
+</li>
 <li><p><code class="docutils literal notranslate"><span class="pre">peerings[]</span></code> — optional <code class="docutils literal notranslate"><span class="pre">{name,</span> <span class="pre">target}</span></code> references to another network in the same spec</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">configuration</span></code> — raw provisioner passthrough</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">default_tags</span></code> / <code class="docutils literal notranslate"><span class="pre">custom_tags</span></code> — cloud tags</p></li>
@@ -168,21 +181,42 @@ independently-tagged networks.</p>
 <span class="w">      </span><span class="nt">address_space</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"10.0.0.0/16"</span><span class="p p-Indicator">]</span>
 <span class="w">      </span><span class="nt">subnets</span><span class="p">:</span>
 <span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">app</span>
-<span class="w">          </span><span class="nt">cidr</span><span class="p">:</span><span class="w"> </span><span class="s">"10.0.1.0/24"</span>
+<span class="w">          </span><span class="nt">cidr</span><span class="p">:</span><span class="w"> </span><span class="s">"10.0.1.0/24"</span><span class="w">        </span><span class="c1"># fixed address</span>
+<span class="w">        </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">aks-nodes</span>
+<span class="w">          </span><span class="nt">prefix_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">25</span><span class="w">          </span><span class="c1"># size only; the address is chosen at deploy</span>
 <span class="w">      </span><span class="nt">default_tags</span><span class="p">:</span>
 <span class="w">        </span><span class="nt">environment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vnet-spoke</span>
+<span class="w">      </span><span class="nt">ipam</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">azure-avnm</span>
+<span class="w">        </span><span class="nt">pool</span><span class="p">:</span><span class="w"> </span><span class="s">"${var:ipam_pool_id}"</span>
+<span class="w">        </span><span class="nt">prefix_length</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">22</span>
 </pre></div>
 </div>
+<p><a class="reference internal" href="../how-to/declare-subnets.html"><span class="std std-doc">how-to/declare-subnets.md</span></a> shows the whole flow: core subnets here,
+workload subnets in a workspace, and the Terraform that creates each.</p>
 </section>
 <section id="notes">
 <h2>Notes<a class="headerlink" href="#notes" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p>When every CIDR involved is a literal (no unresolved tokens), strata validates at schema time
-that subnets don’t overlap and that each subnet fits inside its network’s address space. A
+that fixed subnets don’t overlap and that each fits inside the network’s address space. A
 network/subnet whose CIDR uses a <code class="docutils literal notranslate"><span class="pre">${var:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${secret:}</span></code>/<code class="docutils literal notranslate"><span class="pre">${feature:}</span></code> token skips that check
 until the value is resolved.</p></li>
-<li><p>Cross-checking a network against the workspace that references it (<code class="docutils literal notranslate"><span class="pre">WorkspaceResourceSubnetModel</span></code>)
-is a Phase 2 check, not yet fully wired — see <span class="xref myst">docs/design/v2-schema-overview.md</span>.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">prefix_length</span></code> subnet has no address in configuration, so it takes no part in the overlap
+check. With a literal address space strata checks that the size can fit a range, and that all
+subnets together, fixed and sized, don’t need more addresses than the ranges hold. Without one,
+the same two checks use the block the network asks the IPAM for (<code class="docutils literal notranslate"><span class="pre">ipam.prefix_length</span></code>): no
+subnet larger than it, and no more addresses than it holds. Whether a free block is really left
+is decided at deploy, by your provisioner code or the IPAM.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">${value:network...subnets.&lt;name&gt;.cidr}</span></code> on a <code class="docutils literal notranslate"><span class="pre">prefix_length</span></code> subnet fails with
+<code class="docutils literal notranslate"><span class="pre">value_reference_no_address</span></code>: take its address from your provisioner code instead.</p></li>
+<li><p>Subnet names follow strata’s naming rule (lowercase letters, digits, <code class="docutils literal notranslate"><span class="pre">-</span></code> and <code class="docutils literal notranslate"><span class="pre">_</span></code>). For a name the
+cloud requires, such as Azure’s <code class="docutils literal notranslate"><span class="pre">AzureFirewallSubnet</span></code>, map it in your provisioner code, for example
+from the subnet’s <code class="docutils literal notranslate"><span class="pre">configuration</span></code>.</p></li>
+<li><p>When the solution is validated, a workspace resource’s <code class="docutils literal notranslate"><span class="pre">subnet</span></code> and a workspace’s own
+<code class="docutils literal notranslate"><span class="pre">spec.subnets[]</span></code> are checked against this document: the subnet or network must exist, a workspace
+subnet must not reuse a subnet name the document declares in any of its networks, and it must fit the address space.</p></li>
 </ul>
 </section>
 </section>

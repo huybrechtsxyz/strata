@@ -23,6 +23,13 @@ parameters.
   - `count` — number of instances (default 1)
   - `depends_on[]`, `firewalls[]`, `subnet` — workspace-specific gluing
   - `enabled` — whether this instance is included in the built artifact (default `true`)
+- `spec.networks[]` — names of [`network`](network.md) documents
+- `spec.subnets[]` — subnets this workspace adds to a network it uses, without changing the network
+  document: `network` (the document, listed in `networks`), `virtual_network` (which network in that
+  document; may be left out when it declares only one), `name`, `prefix_length` (the size; your
+  provisioner code or an IPAM chooses the address at deploy), and optional `description`,
+  `configuration`, `custom`. A resource's `subnet` can name one. See
+  [how-to/declare-subnets.md](../how-to/declare-subnets.md)
 - `spec.namespaces[]` — names of [`namespace`](namespace.md) documents
 - `spec.topology[]` — inline topology groupings (type/components/namespaces/volumes) — see
   "Topology grouping" below. Inline since ADR-0028 (reverted from a standalone `kind: topology`
