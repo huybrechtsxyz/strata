@@ -76,6 +76,28 @@ workspace/environment overlay concept is designed.
 Network spec never had a `lifecycle: CommonLifecycleModel` field — not added
 here either.
 
+### 7. Sized subnets, `ipam`, and workspace subnets — strata declares, it never allocates (2.11.0)
+
+A subnet takes exactly one of `cidr` (a fixed address, as before) and
+`prefix_length` (a size; the address is chosen at deploy). A network takes
+`address_space`, `ipam`, or both; `ipam` (`type`, `pool`, `prefix_length`,
+`configuration`) only tells the provisioner which IPAM to use — strata makes
+no IPAM calls and has no IPAM-specific rules. A workspace can add sized
+subnets to a network it uses (`spec.subnets[]`), without editing the shared
+network document; the payload marks each subnet `declared_by: network` or
+`workspace`, so each Terraform creates only its own.
+
+Strata does not compute addresses: allocation is shared and stateful (the
+register of taken addresses is the vnet itself, or the IPAM), and doing it
+in strata would mean a committed register that drifts from the cloud and
+writes into another repository. Strata's checks stay static: fixed subnets
+don't overlap and fit; a size can fit a literal range; all subnets together
+don't need more addresses than the literal ranges hold.
+
+This is not the merging decision 5 rejected: a workspace only *adds* sized
+subnets on top of a network document; it never changes the address space
+or another subnet. Full design: [subnet-addressing.md](../design/subnet-addressing.md).
+
 ## Consequences
 
 - Good: the flat-vs-nested Value-binding inconsistency ADR-0001 flagged
@@ -88,5 +110,9 @@ here either.
   confirms it generalizes cleanly to a second kind, as ADR-0002 hoped.
 - Accepted cost (same as ADR-0005): a token-bearing `cidr`/`address_space`
   entry loses literal CIDR format checking until resolution.
+- Accepted cost (decision 7): a `prefix_length` subnet has no address strata
+  can check or hand to `${value:}`; overlaps between allocated subnets only
+  surface at deploy, and a firewall rule for one must use the provisioner's
+  real subnet address.
 
 

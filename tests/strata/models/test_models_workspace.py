@@ -279,6 +279,75 @@ def test_workspace_resource_subnet_network_valid():
 
 
 # ---------------------------------------------------------------------------
+# spec.subnets — subnets a workload adds to a network it uses
+# (docs/design/subnet-addressing.md, D3)
+# ---------------------------------------------------------------------------
+
+
+def _workspace_with_subnets(*subnets: dict, networks: list[str] | None = None) -> dict:
+    data = _minimal_workspace()
+    data["spec"]["networks"] = ["main-network"] if networks is None else networks
+    data["spec"]["subnets"] = list(subnets)
+    return data
+
+
+def test_workspace_subnet_is_accepted():
+    data = _workspace_with_subnets(
+        {"network": "main-network", "virtual_network": "vnet-main", "name": "app1-pe", "prefix_length": 27}
+    )
+    subnet = WorkspaceModel.model_validate(data).spec.subnets[0]
+    assert (subnet.network, subnet.virtual_network, subnet.name, subnet.prefix_length) == (
+        "main-network",
+        "vnet-main",
+        "app1-pe",
+        27,
+    )
+
+
+def test_workspace_subnet_definition_is_optional():
+    data = _workspace_with_subnets({"network": "main-network", "name": "app1-pe", "prefix_length": 27})
+    assert WorkspaceModel.model_validate(data).spec.subnets[0].virtual_network is None
+
+
+def test_workspace_subnet_network_must_be_listed_in_networks():
+    data = _workspace_with_subnets({"network": "other-network", "name": "app1-pe", "prefix_length": 27})
+    with pytest.raises(ValidationError, match="Subnet 'app1-pe' references undefined network 'other-network'"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_subnet_names_must_be_unique_per_network_document():
+    data = _workspace_with_subnets(
+        {"network": "main-network", "name": "app1-pe", "prefix_length": 27},
+        {"network": "main-network", "name": "app1-pe", "prefix_length": 26},
+    )
+    with pytest.raises(ValidationError, match="main-network"):
+        WorkspaceModel.model_validate(data)
+
+
+def test_workspace_subnet_name_may_repeat_across_network_documents():
+    data = _workspace_with_subnets(
+        {"network": "main-network", "name": "app1-pe", "prefix_length": 27},
+        {"network": "edge-network", "name": "app1-pe", "prefix_length": 27},
+        networks=["main-network", "edge-network"],
+    )
+    assert len(WorkspaceModel.model_validate(data).spec.subnets) == 2
+
+
+@pytest.mark.parametrize(
+    "subnet",
+    [
+        {"network": "main-network", "name": "app1-pe"},
+        {"network": "main-network", "name": "app1-pe", "prefix_length": 0},
+        {"network": "main-network", "name": "app1-pe", "cidr": "10.0.1.0/24"},
+    ],
+    ids=["no-size", "size-out-of-range", "fixed-cidr-not-allowed"],
+)
+def test_workspace_subnet_needs_a_valid_size_and_never_a_fixed_cidr(subnet):
+    with pytest.raises(ValidationError):
+        WorkspaceModel.model_validate(_workspace_with_subnets(subnet))
+
+
+# ---------------------------------------------------------------------------
 # Execution recipe cross-references
 # ---------------------------------------------------------------------------
 

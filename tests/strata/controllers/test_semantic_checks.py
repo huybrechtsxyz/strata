@@ -1341,6 +1341,34 @@ def test_workspace_resource_subnet_check_runs_without_a_topology_block(tmp_path)
     assert any("ghost-subnet" in m for m in context.diagnostics.messages())
 
 
+def _add_workspace_subnet(root: Path, subnet_yaml: str) -> None:
+    """Add a `spec.subnets` block (docs/design/subnet-addressing.md, D3) to the workspace."""
+    path = root / "workspace.yaml"
+    content = path.read_text(encoding="utf-8")
+    assert "  networks: [main-network]\n" in content
+    path.write_text(
+        content.replace("  networks: [main-network]\n", f"  networks: [main-network]\n{subnet_yaml}"),
+        encoding="utf-8",
+    )
+
+
+def test_workspace_subnet_is_accepted_and_a_resource_can_use_it(tmp_path):
+    root = _solution_with_subnet(tmp_path, subnet_name="app1-pe")
+    _add_workspace_subnet(root, "  subnets:\n    - {network: main-network, name: app1-pe, prefix_length: 27}\n")
+
+    context = _resolve(root)
+    assert context.ok, context.diagnostics.messages()
+
+
+def test_workspace_subnet_clashing_with_a_document_subnet_is_caught(tmp_path):
+    root = _solution_with_subnet(tmp_path)
+    _add_workspace_subnet(root, "  subnets:\n    - {network: main-network, name: app, prefix_length: 27}\n")
+
+    context = _resolve(root)
+    assert not context.ok
+    assert "subnet_name_taken" in [d.code for d in context.diagnostics]
+
+
 # ---------------------------------------------------------------------------
 # Deployment -> Environment/Tenant reachability: value tokens resolve
 # ---------------------------------------------------------------------------

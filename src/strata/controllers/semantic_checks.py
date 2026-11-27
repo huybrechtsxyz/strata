@@ -1698,10 +1698,15 @@ def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) ->
     with no `subnet` set (the common case) costs one empty-dict lookup,
     never a loaded-but-unused document.
 
+    The workspace's own `spec.subnets[]` (docs/design/subnet-addressing.md,
+    D3) are checked here too, against the same loaded documents
+    (`WorkspaceService.validate_workspace_subnets()`).
+
     An unresolved `.network` name produces no duplicate finding here —
     `validate_references` already reported it (module docstring).
     """
     network_names = {r.subnet.network for r in (workspace.spec.resources or []) if r.subnet is not None}
+    network_names |= {s.network for s in workspace.spec.subnets or []}
     if not network_names:
         return Diagnostics()
 
@@ -1712,7 +1717,9 @@ def _check_workspace_subnets(index: DocumentIndex, workspace: WorkspaceModel) ->
             network_models[name] = cast(NetworkModel, found.model)
 
     service = WorkspaceService.from_model(workspace)
-    return service.validate_resource_subnets(network_models)
+    diagnostics = service.validate_resource_subnets(network_models)
+    diagnostics.extend(service.validate_workspace_subnets(network_models))
+    return diagnostics
 
 
 # ---------------------------------------------------------------------------

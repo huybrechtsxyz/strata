@@ -75,6 +75,51 @@ class WorkspaceResourceSubnetModel(PlatformBaseModel):
     )
 
 
+class WorkspaceSubnetModel(PlatformBaseModel):
+    """A subnet this workspace adds to a network it uses, with a size but no address: your provisioner code or
+    an IPAM chooses the address at deploy. The network's own document stays untouched; a resource can be placed
+    on this subnet like on any other.
+
+    Design notes:
+    docs/design/subnet-addressing.md, D3: workloads declare their own
+    subnets in their own workspace, against a shared Network document they
+    reference — no change to the network owner's document, because the
+    register of taken addresses is downstream (the vnet itself, or an IPAM),
+    not in strata. Only `prefix_length`, never a fixed `cidr`: fixed
+    addresses belong to the network owner.
+    """
+
+    network: PlatformName = Field(
+        description="The Network document this subnet belongs to; must be listed in this workspace's `networks`."
+    )
+    virtual_network: PlatformName | None = Field(
+        None,
+        description="Which network inside that document (its `spec.networks[].name`). May be left out when the "
+        "document declares exactly one network.",
+    )
+    name: PlatformName = Field(
+        description="Subnet name. Must not be a subnet name the network document already declares, in any of its "
+        "networks."
+    )
+    prefix_length: int = Field(
+        ge=1,
+        le=128,
+        description="The subnet's size as a prefix length (`27` is a /27). Strata passes it on and never computes "
+        "the address.",
+    )
+    description: str | None = Field(None, description="Optional description of the subnet")
+    configuration: dict[str, Any] | None = Field(
+        None,
+        description="Free-form provisioner settings for this subnet (for example delegations or service "
+        "endpoints), passed through as-is. Strata does not validate them.",
+    )
+    custom: dict[str, Any] | None = Field(
+        None,
+        description="Free-form values for your own scripts and Terraform code, passed through as-is. Strata does "
+        "not interpret them.",
+    )
+
+
 class WorkspaceResourceModel(PlatformBaseModel):
     """An instance of a Resource in this workspace, with workspace-specific overrides. `name` is the
     instance name and `resource` names the Resource document it is built from, so one Resource can be
@@ -558,6 +603,8 @@ class WorkspaceSpecModel(PlatformBaseModel):
         "namespace must be listed in `namespaces`.",
         "A resource's `firewalls` must be listed in this workspace's `firewalls`, its `dns_zones` "
         "in `dns_zones` and its `subnet.network` in `networks`.",
+        "Every entry in `subnets` must name a network listed in `networks`, and subnet names must be unique per "
+        "network document.",
         "Every execution step must name a declared provisioner, and its `resources`, `namespaces`, "
         "`topologies`, `dns_zones`, `firewalls`, `networks` and `assets` must exist in the "
         "matching list of this workspace.",
@@ -688,6 +735,11 @@ class WorkspaceSpecModel(PlatformBaseModel):
     )
     networks: list[Annotated[PlatformName, References(PlatformKind.NETWORK)]] | None = Field(
         None, description="Network document names"
+    )
+    subnets: list[WorkspaceSubnetModel] | None = Field(
+        None,
+        description="Subnets this workspace adds to the networks it uses, each with a size but no address. Your "
+        "provisioner code or an IPAM chooses the address at deploy.",
     )
     assets: list[WorkspaceAssetModel] | None = Field(
         None,
@@ -872,6 +924,30 @@ class WorkspaceSpecModel(PlatformBaseModel):
                 )
         if errors:
             raise ValueError("; ".join(errors))
+        return self
+
+    @model_validator(mode="after")
+    def validate_workspace_subnets(self) -> "WorkspaceSpecModel":
+        """Each workspace subnet names a network in `networks`, and its name is unique within that document.
+
+        Whether `virtual_network` exists, and whether the name clashes with the document's own subnets, needs the
+        Network document loaded: Phase 2, `WorkspaceService.validate_workspace_subnets()`.
+        """
+        if not self.subnets:
+            return self
+        network_names = set(self.networks or [])
+        errors = [
+            f"Subnet '{subnet.name}' references undefined network '{subnet.network}'"
+            for subnet in self.subnets
+            if subnet.network not in network_names
+        ]
+        if errors:
+            raise ValueError("; ".join(errors))
+        for network in sorted({subnet.network for subnet in self.subnets}):
+            check_unique_names(
+                [subnet.name for subnet in self.subnets if subnet.network == network],
+                f"subnet names for network '{network}'",
+            )
         return self
 
     @model_validator(mode="after")

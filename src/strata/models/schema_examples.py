@@ -255,6 +255,7 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
                         "subnets": [
                             {"name": "app", "cidr": "10.0.1.0/24"},
                             {"name": "data", "cidr": "10.0.2.0/24"},
+                            {"name": "aks-nodes", "prefix_length": 25},
                         ],
                         "peerings": [{"name": "hub-to-spoke", "target": "spoke"}],
                         "default_tags": {"environment": "prd"},
@@ -263,6 +264,11 @@ EXAMPLES: dict[PlatformKind, list[dict[str, Any]]] = {
                         "name": "spoke",
                         "address_space": ["10.1.0.0/16"],
                         "subnets": [{"name": "app", "cidr": "10.1.1.0/24"}],
+                    },
+                    {
+                        "name": "workloads",
+                        "ipam": {"type": "azure-avnm", "pool": "${var:ipam_pool_id}", "prefix_length": 22},
+                        "subnets": [{"name": "app1", "prefix_length": 27}],
                     },
                 ]
             },

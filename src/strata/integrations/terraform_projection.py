@@ -32,6 +32,7 @@ import posixpath
 from typing import Any
 
 from strata.integrations.resolved_context import ResolvedWorkspaceGraph
+from strata.models.network_model import NetworkIpamModel
 from strata.utils.value_tokens import (
     escape_path_segment,
     extract_value_tokens,
@@ -300,30 +301,109 @@ def _strata_dns(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     return payload
 
 
+def _subnet_payload(
+    *,
+    cidr: str | None,
+    prefix_length: int | None,
+    declared_by: str,
+    description: str | None,
+    configuration: dict[str, Any] | None,
+    custom: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """One subnet's entry. Every subnet carries the same keys, whichever are null: `strata.networks` is a
+    `map(any)` in `strata_variables.tf`, so objects in it must unify (docs/design/subnet-addressing.md, V7)."""
+    return {
+        "cidr": cidr,
+        "prefix_length": prefix_length,
+        "declared_by": declared_by,
+        "description": description,
+        "configuration": configuration or {},
+        "custom": custom or {},
+    }
+
+
+def _ipam_payload(ipam: NetworkIpamModel | None) -> dict[str, Any]:
+    """A network's `ipam` entry: always all four keys, `type` null when the network names no IPAM.
+
+    Never a bare `null`: Terraform cannot convert `strata.networks` (a `map(any)`) when one network's `ipam`
+    is an object and another's is null — "attribute types must all match for conversion to map", found by
+    running `terraform plan` on a real payload (docs/design/subnet-addressing.md, V13).
+    """
+    if ipam is None:
+        return {"type": None, "pool": None, "prefix_length": None, "configuration": {}}
+    return {
+        "type": ipam.type,
+        "pool": ipam.pool,
+        "prefix_length": ipam.prefix_length,
+        "configuration": ipam.configuration or {},
+    }
+
+
+def _workspace_subnets_by_definition(graph: ResolvedWorkspaceGraph, document: str) -> dict[str, dict[str, Any]]:
+    """`{definition name: {subnet name: entry}}` for the workspace's own `spec.subnets[]` on `document`.
+
+    A subnet without `virtual_network` goes into the document's only network. One whose definition cannot be
+    resolved is left out: validation already reported it (`unregistered_virtual_network`), and a build
+    only runs on a valid solution.
+    """
+    network_model = graph.networks[document]
+    found: dict[str, dict[str, Any]] = {}
+    for subnet in graph.workspace.spec.subnets or []:
+        if subnet.network != document:
+            continue
+        definition = network_model.target_definition(subnet.virtual_network)
+        if definition is None:
+            continue
+        found.setdefault(definition.name, {})[subnet.name] = _subnet_payload(
+            cidr=None,
+            prefix_length=subnet.prefix_length,
+            declared_by="workspace",
+            description=subnet.description,
+            configuration=subnet.configuration,
+            custom=subnet.custom,
+        )
+    return found
+
+
 def _strata_networks(graph: ResolvedWorkspaceGraph) -> dict[str, Any]:
     """`strata.networks` — name -> {description, labels, tags, networks:
-    {network_name: {address_space, subnets, peerings, configuration,
+    {network_name: {address_space, ipam, subnets, peerings, configuration,
     custom, default_tags, custom_tags}}}. Tokens stay literal (build-time
-    only, ADR-0022 D4)."""
+    only, ADR-0022 D4).
+
+    Each subnet says who creates it (`declared_by`: `network` for the
+    document's own, `workspace` for this workspace's `spec.subnets[]`,
+    merged in here) and carries a fixed `cidr` or a `prefix_length` that the
+    provisioner code or an IPAM turns into an address
+    (docs/design/subnet-addressing.md, D4/D5). `ipam` only says which
+    IPAM to use (`type` null for none); strata never calls it.
+    """
     payload: dict[str, Any] = {}
     for name in graph.workspace.spec.networks or []:
         network_doc = graph.networks[name]
         meta = network_doc.meta
+        workspace_subnets = _workspace_subnets_by_definition(graph, name)
         payload[name] = {
             "description": (meta.annotations or {}).get("description", ""),
             "labels": meta.labels or {},
             "tags": meta.tags or [],
             "networks": {
                 net.name: {
-                    "address_space": list(net.address_space),
+                    "address_space": list(net.address_space or []),
+                    "ipam": _ipam_payload(net.ipam),
                     "subnets": {
-                        subnet.name: {
-                            "cidr": subnet.cidr,
-                            "description": subnet.description,
-                            "configuration": subnet.configuration or {},
-                            "custom": subnet.custom or {},
-                        }
-                        for subnet in net.subnets
+                        **{
+                            subnet.name: _subnet_payload(
+                                cidr=subnet.cidr,
+                                prefix_length=subnet.prefix_length,
+                                declared_by="network",
+                                description=subnet.description,
+                                configuration=subnet.configuration,
+                                custom=subnet.custom,
+                            )
+                            for subnet in net.subnets
+                        },
+                        **workspace_subnets.get(net.name, {}),
                     },
                     "peerings": {p.name: {"target": p.target} for p in net.peerings or []},
                     "configuration": net.configuration or {},

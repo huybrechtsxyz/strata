@@ -30,6 +30,7 @@ from strata.models.module_model import ModuleMetaModel, ModuleModel, ModuleSpecM
 from strata.models.namespace_model import NamespaceMetaModel, NamespaceModel, NamespaceSpecModel
 from strata.models.network_model import (
     NetworkDefinitionModel,
+    NetworkIpamModel,
     NetworkMetaModel,
     NetworkModel,
     NetworkSpecModel,
@@ -57,6 +58,7 @@ from strata.models.workspace_model import (
     WorkspaceModel,
     WorkspaceResourceModel,
     WorkspaceSpecModel,
+    WorkspaceSubnetModel,
 )
 from strata.utils.value_tokens import escape_path_segment
 
@@ -625,3 +627,114 @@ def test_build_strata_locals_list_with_two_secret_indices_both_present():
     assert content.count("for idx, item in") == 1
     assert "idx == 0 ?" in content
     assert "idx == 2 ?" in content
+
+
+# ---------------------------------------------------------------------------
+# strata.networks: sized subnets, ipam, workspace subnets
+# (docs/design/subnet-addressing.md, D4/D5)
+# ---------------------------------------------------------------------------
+
+
+def _estate_graph(*definitions: NetworkDefinitionModel) -> ResolvedWorkspaceGraph:
+    graph = _graph(network_names=["estate"])
+    graph.networks["estate"] = NetworkModel(
+        meta=NetworkMetaModel(name="estate"), spec=NetworkSpecModel(networks=list(definitions))
+    )
+    return graph
+
+
+_SUBNET_KEYS = {"cidr", "prefix_length", "declared_by", "description", "configuration", "custom"}
+
+
+def test_networks_payload_sized_subnet_and_ipam_only_network():
+    graph = _estate_graph(
+        NetworkDefinitionModel(
+            name="vnet_main",
+            ipam=NetworkIpamModel(type="azure-avnm", pool="${var:ipam_pool_id}", prefix_length=22),
+            subnets=[SubnetModel(name="aks", prefix_length=25)],
+        )
+    )
+
+    network = build_strata_payload(graph)["networks"]["estate"]["networks"]["vnet_main"]
+
+    assert network["address_space"] == []
+    assert network["ipam"] == {
+        "type": "azure-avnm",
+        "pool": "${var:ipam_pool_id}",
+        "prefix_length": 22,
+        "configuration": {},
+    }
+    assert network["subnets"]["aks"] == {
+        "cidr": None,
+        "prefix_length": 25,
+        "declared_by": "network",
+        "description": None,
+        "configuration": {},
+        "custom": {},
+    }
+
+
+def test_networks_payload_fixed_subnet_has_no_prefix_length_and_no_ipam():
+    payload = build_strata_payload(_graph(network_names=["estate"]))
+
+    network = payload["networks"]["estate"]["networks"]["vnet_main"]
+    # never a bare null: Terraform can't convert map(any) when another network's ipam is an object (V13)
+    assert network["ipam"] == {"type": None, "pool": None, "prefix_length": None, "configuration": {}}
+    assert network["subnets"]["aks"]["cidr"] == "10.0.1.0/24"
+    assert network["subnets"]["aks"]["prefix_length"] is None
+    assert network["subnets"]["aks"]["declared_by"] == "network"
+
+
+def test_networks_payload_merges_the_workspaces_own_subnets_into_their_network():
+    graph = _estate_graph(
+        NetworkDefinitionModel(
+            name="vnet_main",
+            address_space=["10.0.0.0/16"],
+            subnets=[SubnetModel(name="aks", cidr="10.0.1.0/24")],
+        )
+    )
+    graph.workspace.spec.subnets = [
+        WorkspaceSubnetModel(network="estate", name="app1_pe", prefix_length=27, configuration={"delegation": "x"})
+    ]
+
+    subnets = build_strata_payload(graph)["networks"]["estate"]["networks"]["vnet_main"]["subnets"]
+
+    assert set(subnets) == {"aks", "app1_pe"}
+    assert subnets["app1_pe"] == {
+        "cidr": None,
+        "prefix_length": 27,
+        "declared_by": "workspace",
+        "description": None,
+        "configuration": {"delegation": "x"},
+        "custom": {},
+    }
+    # one shape for every subnet, so Terraform's map(any) unifies
+    assert all(set(entry) == _SUBNET_KEYS for entry in subnets.values())
+
+
+def test_networks_payload_puts_a_workspace_subnet_in_its_named_definition():
+    graph = _estate_graph(
+        NetworkDefinitionModel(name="vnet_main", address_space=["10.0.0.0/16"]),
+        NetworkDefinitionModel(name="vnet_data", address_space=["10.1.0.0/16"]),
+    )
+    graph.workspace.spec.subnets = [
+        WorkspaceSubnetModel(network="estate", virtual_network="vnet_data", name="app1_db", prefix_length=24)
+    ]
+
+    networks = build_strata_payload(graph)["networks"]["estate"]["networks"]
+
+    assert networks["vnet_main"]["subnets"] == {}
+    assert set(networks["vnet_data"]["subnets"]) == {"app1_db"}
+
+
+def test_networks_payload_leaves_out_a_workspace_subnet_whose_network_cannot_be_resolved():
+    """No `virtual_network` in a document with two networks: validation reports it; the projection must not guess."""
+    graph = _estate_graph(
+        NetworkDefinitionModel(name="vnet_main", address_space=["10.0.0.0/16"]),
+        NetworkDefinitionModel(name="vnet_data", address_space=["10.1.0.0/16"]),
+    )
+    graph.workspace.spec.subnets = [WorkspaceSubnetModel(network="estate", name="app1_pe", prefix_length=27)]
+
+    networks = build_strata_payload(graph)["networks"]["estate"]["networks"]
+
+    assert all(network["subnets"] == {} for network in networks.values())

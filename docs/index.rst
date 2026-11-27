@@ -20,6 +20,7 @@ strata-v2
    how-to/catch-secrets-declared-as-variables
    how-to/ci-deploy-pipeline
    how-to/composite-variable-fragments
+   how-to/declare-subnets
    how-to/deploy-run-streaming
    how-to/deployment-handover
    how-to/environment-and-tenant-bases
