@@ -88,6 +88,25 @@ strata where that checkout is:
   took had uncommitted changes. The deploy's audit manifest copies both under
   `artifacts.repositories.<name>`. The folder must be a git checkout itself, not a plain folder
   inside another repository. See [Which commits were deployed](configuration.md#which-commits-were-deployed).
+
+  `requires` (optional) states which versions of the repository this solution accepts, as a range over
+  the tag the checkout is on:
+
+  ```yaml
+  remotes:
+    - name: iac
+      type: git
+      url: https://github.com/org/iac.git
+      path: ../iac
+      requires: ">=1.4.0 <2.0.0"   # also ">=1.4.0, <2.0.0" or "~> 1.4"
+  ```
+
+  `validate`, and so `build run` and `deploy`, fail with `remote_requires_unmet` when the checkout is
+  on a version tag outside the range, or on a tag that is not a version. A `v` prefix is fine, and a
+  prerelease counts as its version (`v1.5.0-rc1` is in the range above, `v2.0.0-rc1` is not). On a
+  branch or a bare commit, such as a sandbox following `dev`, the range is not checked and an info
+  finding says so (`remote_requires_unchecked`), so `validate --strict` still passes. A checkout
+  that is not there is not checked. The pipeline must fetch tags (Azure DevOps: `fetchTags: true`).
 - **`reference` with `fetch: external`**. Strata expects the checkout at
   `.strata/remotes/<name>/<reference>`, so the pipeline must repeat the ref and place or link its
   checkout there.
@@ -167,8 +186,11 @@ Each listed checkout is scanned like the solution root:
 - **Writes.** A command that edits a document, such as `promote apply`, writes the file where it was found, which
   can be a zone checkout. Commit it there. A new document (`version new`) goes to the solution root unless you pass
   a path.
-- **Path conventions** (`configuration.spec.paths`) describe the solution root's layout and do not judge documents
-  found in a document remote.
+- **Path conventions** (`configuration.spec.paths`) judge a document by its path relative to the root it was found
+  in, as `exclude` does. A zone leaf at `repos/config-zone01/deploy/hubs/zone01/...` is judged as
+  `deploy/hubs/zone01/...`, so write the conventions as `deploy/hubs/{hub}/...` and they hold wherever the pipeline
+  checks the zone out. A deployment whose `layers.follows` names a convention its file is outside of, or that another
+  convention matches instead, is `layers_follows_unmatched`, so a misplaced leaf never passes silently.
 
 In VS Code, open the solution and the zone checkouts as one multi-root workspace. `.vscode/settings.json` in the
 solution maps the schemas for the solution's folder only, so map them for every folder in the `.code-workspace`

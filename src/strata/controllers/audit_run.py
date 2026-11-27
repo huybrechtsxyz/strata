@@ -59,6 +59,7 @@ from strata.controllers.sbom_controller import SBOM_FORMAT
 from strata.controllers.security_gate_controller import built_commit_sha
 from strata.controllers.solution_context import SolutionContext
 from strata.controllers.source_record import read_build_record
+from strata.controllers.source_record import solution_ref as recorded_solution_ref
 from strata.controllers.value_controller import (
     reachable_environments,
     resolve_deployment,
@@ -232,9 +233,15 @@ def finalize_and_distribute_deploy_audit(
     repositories, images, charts = _collect_artifacts_bom(
         context, deployment, diagnostics, recorded=None if record is None else record.remotes
     )
-    solution_commit, solution_dirty = (
-        (built_commit_sha(context.root), None) if record is None else (record.solution_commit, record.solution_dirty)
-    )
+    if record is None:  # an older build: read the solution at deploy, as before the record
+        solution_commit, solution_dirty = built_commit_sha(context.root), None
+        solution_ref = recorded_solution_ref(context.root, solution_commit)
+    else:
+        solution_commit, solution_dirty, solution_ref = (
+            record.solution_commit,
+            record.solution_dirty,
+            record.solution_ref,
+        )
 
     policy_results = None if action == "destroy" else read_policy_results(build_path)
     sbom_reference, sbom_bytes = _sbom_reference(build_path, diagnostics)
@@ -256,6 +263,7 @@ def finalize_and_distribute_deploy_audit(
         pipeline=_pipeline(),
         commit_sha=solution_commit,
         commit_dirty=solution_dirty,
+        commit_ref=solution_ref,
         artifacts=ManifestArtifactsModel(
             platform=platform_ref,
             repositories=repositories,

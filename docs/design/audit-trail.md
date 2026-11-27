@@ -73,8 +73,9 @@ record:
   severity: `errors`, `warnings`, `messages`;
 - who and from what: `deployed_by` (see "Actor"); `pipeline`, the CI run that deployed (Azure Pipelines or GitHub
   Actions: system, run id and number, pipeline, branch, and a link to the run), read from the job's own variables
-  by `ci_run.resolve_pipeline_run()` and left out outside CI; `commit_sha` and `commit_dirty` of the solution, both
-  copied from the build's record ([remote-commit-provenance.md](remote-commit-provenance.md));
+  by `ci_run.resolve_pipeline_run()` and left out outside CI; `commit_sha`, `commit_dirty` and `commit_ref` (the
+  tag or branch its checkout was on) of the solution, all copied from the build's record
+  ([remote-commit-provenance.md](remote-commit-provenance.md));
 - `artifacts`: `platform` (`resolved.yaml` by hash and path, never its content), `repositories` (each remote's url,
   ref, commit and dirty flag), `images`, `charts`, and `providers` (each provisioner's type, tool version and path);
 - `stages`, one per provisioning step (see "Stages");

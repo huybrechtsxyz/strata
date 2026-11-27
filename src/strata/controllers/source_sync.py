@@ -407,6 +407,7 @@ def sync_asset(
                 url=location.url,
                 reference=location.reference,
                 path=None,
+                requires=None,
                 fetch=location.fetch,
                 integration=None,
                 description=None,

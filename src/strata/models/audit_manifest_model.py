@@ -293,6 +293,11 @@ class DeploymentManifestModel(PlatformBaseModel):
         default=None,
         description="Whether the solution had uncommitted changes when it was built; left out when unknown",
     )
+    commit_ref: str | None = Field(
+        default=None,
+        description="The tag the solution's checkout was exactly on when it was built, else its branch, as the build "
+        "recorded it in resolved.yaml; left out when unknown or on a detached commit",
+    )
 
     pipeline: ManifestPipelineModel | None = Field(
         default=None, description="The CI run that did the deploy; left out for a run outside CI"

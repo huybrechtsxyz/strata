@@ -1,7 +1,7 @@
 # Remote commit provenance - Design
 
 - Status: current
-- Last updated: 2026-11-19
+- Last updated: 2026-11-27
 
 ## Overview
 
@@ -30,12 +30,13 @@ your pipeline checked out", "Documents in other repositories").
 
 ```yaml
 solution:                       # the repository holding strata.yaml
+  ref: v2.3.0                   # the tag its checkout is exactly on, else its branch, else null
   commit: 5d0e7a9c31...
   dirty: false
 remotes:
   infra:
     url: https://git.example.com/org/infra.git
-    ref: null                   # path mode: the pipeline owns the ref
+    ref: v1.4.0                 # path mode: read from the checkout the pipeline made
     commit: 3f9c2e1d4b...       # full SHA, or null when it could not be read
     dirty: false                # true when files the build took had uncommitted changes
   asset:openapi:                # an asset's own spec.location
@@ -58,7 +59,16 @@ remotes:
   and version.
 - **Keys.** The key is the remote's name, or `asset:<name>` for an asset's own `spec.location`. A remote name cannot
   contain `:`, so the two never collide.
-- **`ref`** is the reference after version pins. It is `null` in path mode, because the pipeline chose it.
+- **`ref`** is the reference after version pins for a `reference` remote. For a path remote, and for the solution,
+  the pipeline chose the ref, so `checkout_ref()` reads it from the checkout: the tag HEAD is exactly on (the
+  highest release version when there are several; a build number such as `20241001` is not one), else the branch
+  checked out, else `null`. The solution's is recorded only when its HEAD is the recorded `commit`: that commit may
+  come from a CI variable (a pull request's merge commit), and HEAD's branch would then name another commit. A pipeline checkout at a commit
+  is detached on no tag and records `null`, which is fine: `commit` says which tree it was. A tag the checkout did
+  not fetch is not seen; an Azure DevOps checkout needs `fetchTags: true`. The solution's `ref` goes into the audit
+  manifest as `commit_ref`, beside `commit_sha`, and each remote's as its repository's `ref`, so "which version
+  ran" is answered from the audit trail alone. A build made before 2.12.0 has no `solution.ref`, which reads as
+  unknown.
 - **`solution.commit`** is `built_commit_sha()`, the value the SBOM records: a CI commit variable first, otherwise
   `git rev-parse HEAD`. A solution outside git records `commit: null` and `dirty: null` without a warning, as the
   SBOM does. That is the normal case for an example or a test.
@@ -129,8 +139,8 @@ The build warns, with a hint, about each gap, whatever the option says:
   - a missing key;
   - a value of the wrong type;
   - an entry that `ManifestRepositoryModel` rejects.
-- **`commit_sha` and `commit_dirty`** come from `solution`. They are not read again at deploy, even when a CI
-  variable is set then.
+- **`commit_sha`, `commit_dirty` and `commit_ref`** come from `solution`. They are not read again at deploy, even
+  when a CI variable is set then.
 - **`artifacts.repositories`** is the list of remotes the workspace names, with the record merged in:
 
   | Remote                                                     | Entry                                                |
@@ -139,8 +149,8 @@ The build warns, with a hint, about each gap, whatever the option says:
   | The workspace names it, and the build took nothing from it | `{url, ref}`, with no commit and no warning          |
   | Only the record has it                                     | The record's entry, keyed as the record keys it      |
 
-  The entries are sorted by key. `ManifestRepositoryModel.dirty` and `DeploymentManifestModel.commit_dirty` are
-  optional, so older manifests still load.
+  The entries are sorted by key. `ManifestRepositoryModel.dirty`, `DeploymentManifestModel.commit_dirty` and
+  `commit_ref` are optional, so older manifests still load.
 - **No checkout is read** for a build that has the record, so the deploy does not repeat the build's warnings.
 - **An older build** keeps the old lookup. `_checkout_commit()` reads a path remote's `HEAD` at deploy, and warns
   when it cannot.
@@ -290,8 +300,11 @@ spec:
   read.
 - **Writes.** `promote apply` and `version update` write to `IndexEntry.source`, wherever the document was found. A
   new document (`version new`) goes to the solution root unless `--path` says otherwise.
-- **Code that assumed one root.** Path conventions judge only documents under the solution root. `version show`
-  prints paths with `layout.display_path()`.
+- **Code that assumed one root.** Path conventions judge every document relative to the root it was discovered in
+  (`_discovery_roots()` in `semantic_checks.py`), as `discovery.exclude` does: a leaf in a checkout at
+  `repos/<name>/deploy/hubs/...` is judged as `deploy/hubs/...`, so the conventions do not name the folder a
+  pipeline checks the data out to. A checkout inside the solution root belongs to the checkout, not the root.
+  `version show` prints paths with `layout.display_path()`.
 - **Editors.** The VS Code extension resolves each finding's absolute `source`, so findings in a zone checkout
   land on the right file. Schema association for a zone folder needs a `yaml.schemas` entry in the
   `.code-workspace` file; `solution.md` shows it.
@@ -335,6 +348,13 @@ spec:
 - **Only the deploy enforces the option.** `spec.audit` is in the configuration, so the option applies on a
   developer's machine too. Failing the build would block the normal loop of editing and then building. Building is
   harmless; deploying is what the audit is about. An unreadable `dirty` counts as dirty under the option.
+- **A path remote's `ref` used to be `null`**, on the reasoning that the pipeline owns it. That left "which platform
+  version did this deploy run?" to be worked out from a SHA. Strata still never chooses or moves the ref; it now
+  reads the one the pipeline chose. A CI variable was not used: in a pipeline with several checkouts it describes
+  the repository that triggered the run, not each checkout.
+- **Path conventions used to judge only documents under the solution root**, and a checkout inside the root was
+  judged by its path through the checkout folder (`repos/<name>/...`), which matched no convention. So a misplaced
+  leaf in a document remote passed silently. Each document is now judged relative to its own root.
 - **"Is the commit pushed?" is out of scope.** `git branch -r --contains` needs remote-tracking refs, which a
   pipeline's shallow, detached checkout usually lacks. `git ls-remote` needs the network and credentials, which a
   path remote never has. A CI build's commits come from the server anyway. A recorded commit may exist nowhere

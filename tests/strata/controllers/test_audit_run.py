@@ -1392,8 +1392,30 @@ def test_manifest_records_the_commit_of_a_path_remote(tmp_path: Path, _terraform
     assert repository["commit"] == head
     assert repository["dirty"] is False
     assert _commit_warnings(diagnostics) == []
-    assert "ref" not in repository  # the pipeline owns the ref; the manifest does not invent one
+    assert repository["ref"] == "main"  # what the pipeline's checkout is on, as the build recorded it
     assert repository["url"] == "https://example.com/org/infra.git"
+
+
+@pytest.mark.skipif(not _git_available(), reason="git not on PATH")
+def test_manifest_records_the_tags_the_solution_and_a_path_remote_were_built_at(
+    tmp_path: Path, _terraform_stub, _no_ci_commit
+):
+    """R3: "which version ran" from the audit trail alone, with both repositories checked out at release tags."""
+    root = _solution_with_workload(tmp_path)
+    checkout = _with_path_remote(root, "../infra-sibling")
+    _init_repository(checkout)
+    _git(checkout, "tag", "-a", "v1.4.0", "-m", "1.4.0")
+    _git(checkout, "checkout", "--detach", "v1.4.0")
+    _init_repository(root)
+    _git(root, "tag", "v2.3.0")
+    _git(root, "checkout", "--detach", "v2.3.0")
+    build_path, _ = _build(root, tmp_path)
+
+    _finalize(root, build_path)
+
+    manifest = _manifest(root)
+    assert manifest["commit_ref"] == "v2.3.0"
+    assert manifest["artifacts"]["repositories"]["infra-remote"]["ref"] == "v1.4.0"
 
 
 @pytest.mark.skipif(not _git_available(), reason="git not on PATH")
@@ -1532,6 +1554,7 @@ def test_an_older_build_without_the_record_is_read_at_deploy(tmp_path: Path, _te
     }
     assert manifest["commit_sha"] == solution_now
     assert "commit_dirty" not in manifest
+    assert manifest["commit_ref"] == "main"  # read with the commit, from the same checkout
 
 
 def test_an_older_build_with_a_path_remote_that_is_not_a_checkout_warns_at_deploy(tmp_path: Path, _terraform_stub):

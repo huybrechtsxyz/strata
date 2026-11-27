@@ -8,6 +8,19 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-11-27
+
+### Added
+
+- **`resolved.yaml` records the tag or branch a `path` remote and the solution are checked out at.** A remote's `ref` was always `null` in path mode; it is now the tag HEAD is exactly on (the highest version when there are several), else the branch, else `null` for a checkout at a bare commit. The solution's record gains `ref` too. The audit manifest carries both: the solution's as `commit_ref` beside `commit_sha`, each remote's as its repository's `ref`, so "which version ran" is answered from the audit trail alone. The checkout needs its tags: in Azure DevOps, set `fetchTags: true` on the `checkout` step.
+- **A `path` remote can say which versions the solution accepts: `requires: ">=1.4.0 <2.0.0"`.** A pipeline names the platform's tag and each repository's tag separately, so they can drift apart. `validate`, and so `build run` and `deploy`, now fail with `remote_requires_unmet` when the checkout is on a version tag outside the range, or on a tag that is not a version. On a branch or a bare commit (a sandbox following `dev`) the range is not checked and an info finding says so (`remote_requires_unchecked`), so `validate --strict` still passes. A commit passes when any of its release tags is in the range; a `v` prefix and prerelease tags are fine, and a build-number tag such as `20241001` is not a release. If git cannot read the tags (for example "dubious ownership" in a CI container), a warning says so. See [solution.md](../docs/config/solution.md), "A repository your pipeline checked out".
+- **Version ranges accept clauses separated by a space**, as in npm: `>=1.4.0 <2.0.0` means `>=1.4.0, <2.0.0`. This applies to `requires` and to an integration's `version`.
+- **`layers_follows_unmatched`: a deployment's `layers.follows` must name a convention its file is under.** A file outside that convention's `scope`, or one another convention's pattern matches instead, used to pass silently, because no check held it to the convention it declares. Reported with that convention's `enforcement` (an error under `deny`).
+
+### Changed
+
+- **Path conventions judge documents in a `spec.discovery.remotes` checkout, relative to that checkout**, as `discovery.exclude` already does. A leaf at `repos/<checkout>/deploy/hubs/...` is judged as `deploy/hubs/...`, so conventions written for the solution's layout hold wherever the pipeline checks the data out. Before, these documents were never judged, so a misplaced leaf (`path_convention_layers_drift`, `path_convention_mismatch`) passed. **A solution with document remotes may see new findings**: a convention's `enforcement: warn` keeps them warnings while you fix them.
+
 ## [2.11.0] - 2026-11-26
 
 ### Added

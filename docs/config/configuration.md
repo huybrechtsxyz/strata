@@ -76,18 +76,22 @@ Every git remote the build copied files from sits under `remotes`, and so does e
 `spec.location` is listed as `asset:<name>`.
 
 ```yaml
-solution: {commit: 5d0e7a9c31..., dirty: false}
+solution: {ref: v2.3.0, commit: 5d0e7a9c31..., dirty: false}
 remotes:
-  iac: {url: https://github.com/org/iac.git, ref: null, commit: 3f9c2e1d4b..., dirty: false}
+  iac: {url: https://github.com/org/iac.git, ref: v1.4.0, commit: 3f9c2e1d4b..., dirty: false}
 ```
 
-- `ref` is the reference after version pins. It is `null` for a `path` remote, because the pipeline chose it.
+- `ref` is the reference after version pins for a remote with a `reference`. For a `path` remote and for the
+  solution, the pipeline chose it, so strata reads it from the checkout: the tag HEAD is exactly on (the highest
+  version when there are several), else the branch, else `null` (a checkout at a bare commit). The checkout must
+  have the tags: in Azure DevOps, set `fetchTags: true` on the `checkout` step.
 - `dirty: true` means files the build took had uncommitted changes, so the commit alone does not describe them.
   Only the paths the build copied are checked. Files that git ignores do not count.
 - The solution's `commit` is the one the SBOM records: a CI commit variable first, otherwise `git rev-parse HEAD`.
 
 The deploy's audit manifest copies the record. `artifacts.repositories.<name>` gains `commit` and `dirty`, and the
-solution's record becomes `commit_sha` and `commit_dirty`. The manifest therefore names what was built, even when
+solution's record becomes `commit_sha`, `commit_dirty` and `commit_ref`. So "which version ran" is answered from the
+audit trail alone, and the manifest names what was built, even when
 build and deploy run in separate jobs or a checkout moved in between. A build made by an older strata has no record.
 Its deploy reads the commits at deploy time, as before.
 

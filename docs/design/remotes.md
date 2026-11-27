@@ -1,7 +1,7 @@
 # Remotes — Design
 
 - Status: current
-- Last updated: 2026-11-19
+- Last updated: 2026-11-27
 
 ## Overview
 
@@ -19,7 +19,8 @@ A git remote is found in one of two ways:
 - **Ref mode** (`reference`): strata clones the repository at that ref, or, with `fetch: external`, expects someone else
   to have put it at `.strata/remotes/<name>/<reference>`.
 - **Path mode** (`path`): a pipeline or a developer already checked the repository out, and strata reads it there. The
-  pipeline owns the ref; `strata.yaml` does not repeat it.
+  pipeline owns the ref; `strata.yaml` does not repeat it. The build records the tag or branch the checkout is on
+  ([remote-commit-provenance.md](remote-commit-provenance.md)).
 
 ## Current Design
 
@@ -32,6 +33,7 @@ A git remote is found in one of two ways:
 | `url`         | Where the source lives. For `local`, a path relative to the solution root. In path mode it only records which repository this is (provenance). |
 | `reference`   | The ref to check out. Required for `git` (unless `path` is given) and `oci`; rejected for `helm` and `local`.            |
 | `path`        | Path mode: where the checkout already is. `git` only.                                                                    |
+| `requires`    | Path mode only: the version range the checkout's tag must be in, such as `>=1.4.0 <2.0.0`.                               |
 | `fetch`       | `strata` (default): strata fetches it. `external`: CI or a developer already did, and strata only reads it.             |
 | `integration` | The integration whose `authentication` supplies credentials for the fetch. It must declare the `sources` capability.    |
 
@@ -51,13 +53,16 @@ turned off ref pinning and the dirty-tree check. `type: git` with `fetch: extern
 5. `integration` is refused with `path`: strata never fetches a path remote, so credentials have no use.
 6. `url` stays required. It is not used to find anything, but it is recorded in the audit manifest and keeps
    `strata.yaml` honest about which repository this is.
+7. `requires` is only valid with `path`, and must parse as a version range. A `reference` remote names its version
+   in `strata.yaml` already.
 
 ```yaml
 remotes:
-  - name: iac-int            # path mode: the pipeline owns the ref
+  - name: iac                # path mode: the pipeline owns the ref
     type: git
-    url: https://github.example.com/org/iac-int-deployment.git
-    path: ../iac-int-deployment
+    url: https://github.example.com/org/iac.git
+    path: ../iac
+    requires: ">=1.4.0 <2.0.0"   # optional: the versions this solution was tested with
 
   - name: shared-modules     # ref mode
     type: git
@@ -120,6 +125,41 @@ add it to `discovery.exclude` so strata does not load its YAML as solution docum
 
 The user-facing guide is [solution.md](../config/solution.md), "A repository your pipeline checked out".
 
+### Which versions a solution accepts
+
+A pipeline names the tag of each repository it checks out, and Azure DevOps cannot read a ref from a file. So the
+platform's tag and the Terraform repository's tag are two values in one pipeline file, and they can drift apart.
+`requires` states which versions of a path remote a solution release was tested with, and `validate` checks it
+(`_check_remote_requires()` in `semantic_checks.py`). `build run` and `deploy` start with `require_valid()`, so they
+refuse a checkout outside the range before they take a file from it.
+
+- **The range** is read by `parse_version_constraint()`, the same reader as an integration's `version`: PEP 440
+  specifiers, Terraform's `~>`, and clauses separated by a comma or a space (`>=1.4.0 <2.0.0`, as in npm). A range
+  that does not parse is a schema error.
+- **The version** is any release tag HEAD is exactly on (`checkout_tags()`): the check passes when one of them is
+  in the range, since one tree may carry `v1.9.0` and `v2.0.0` and the pipeline may have named either. A release
+  tag starts with `major.minor` (`is_release_tag()`), so a CI build tag such as `20241001`, a PEP 440 version too,
+  never counts or outranks one. A `v` prefix is fine. A prerelease counts (`contains(..., prereleases=True)`):
+  `v1.5.0-rc1` is in `>=1.4.0 <2.0.0`, and `v2.0.0-rc1` is not, because PEP 440 keeps `<2.0.0` below the 2.0.0
+  prereleases.
+- **Findings**, on `spec.remotes.<n>.requires` in `strata.yaml`:
+
+  | Checkout                                    | Finding                                 |
+  | ------------------------------------------- | --------------------------------------- |
+  | On a release tag in the range               | none                                    |
+  | On release tags, none in the range          | `remote_requires_unmet`, error          |
+  | On tags, none of them a release             | `remote_requires_unmet`, error          |
+  | On a branch, a bare commit, or not git      | `remote_requires_unchecked`, info       |
+  | A git checkout whose tags git cannot read   | `remote_requires_unchecked`, warning    |
+  | Not there                                   | none: the build reports a missing one   |
+
+  A failing `git tag` ("dubious ownership" of another user's checkout in a CI container, a timeout) is a warning
+  with git's error, never read as "no tag": that would let any version through as a quiet info.
+
+  A branch is an info, not a warning: a sandbox that follows `dev` is a deliberate layout, and a warning would fail
+  `validate --strict` for it (the reason 2.3.1's warning for a `path` outside the solution was dropped). A missing
+  checkout is skipped because a developer may validate without every repository checked out.
+
 ### Not covered
 
 - Fetching `oci` and `helm` remotes. Helm pulls charts itself; nothing yet needs strata to fetch a non-chart OCI
@@ -132,6 +172,10 @@ The user-facing guide is [solution.md](../config/solution.md), "A repository you
 - An environment override for `path`, for a layout where no single value fits both CI and workstations. No case has
   needed it.
 - Making `url` optional in path mode. It is kept as provenance.
+- `requires` on a `reference` remote, checked against the reference a `version` document pins it to. The pin check
+  (`check_version_pins()`) would be the place. Revisit when a pinned remote needs a guard.
+- Warning when a tag moved: a checkout that already had a tag keeps it on `git fetch`. That is git's behaviour;
+  protect release tags on the server.
 
 ## Related Decisions
 
@@ -173,3 +217,6 @@ The user-facing guide is [solution.md](../config/solution.md), "A repository you
   deploy-time read can name a tree that was never built.
 - Path remotes were first refused as GitOps and audit-sink targets, since a push needs a branch. They are now written
   in the checkout and pushed to an explicit `branch`.
+- 2.12.0 added `requires`. A pipeline script comparing tags was the alternative; it would live in every pipeline and
+  know nothing of the solution release it guards. A branch checkout was first going to warn, and became an info so
+  `validate --strict` keeps passing for a sandbox.

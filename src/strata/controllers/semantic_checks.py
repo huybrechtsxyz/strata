@@ -40,6 +40,7 @@ from jsonschema.exceptions import SchemaError
 from referencing.exceptions import Unresolvable
 
 from strata.controllers.artifact_tokens import artifact_token_values, helm_delivered_artifacts
+from strata.controllers.checkout_state import checkout_branch, checkout_tags, is_release_tag
 from strata.controllers.deployment_resolution import deployment_of, deployment_workspace
 from strata.controllers.document_chains import chain_params
 from strata.controllers.document_reachability import check_unreferenced_documents, check_unused_bases
@@ -105,10 +106,11 @@ from strata.services.workspace_service import WorkspaceService, effective_assets
 from strata.utils.builtin_types import ProvisionerType
 from strata.utils.dependency_order import upstream_of
 from strata.utils.diagnostics import Diagnostics
-from strata.utils.layout import manifest_path
+from strata.utils.layout import manifest_path, path_remote_location
 from strata.utils.path_conventions import in_scope, match_directory, match_filename, matches_segment_pattern
 from strata.utils.report_template import check_report_template
 from strata.utils.value_tokens import extract_value_tokens
+from strata.utils.version_constraints import version_satisfies
 
 log = get_logger(__name__)
 
@@ -166,9 +168,10 @@ def run_semantic_checks(
     diagnostics.extend(_check_remotes(index, solution))
     diagnostics.extend(_check_asset_locations(index))
     diagnostics.extend(_check_remote_integrations(index, solution, root))
+    diagnostics.extend(_check_remote_requires(solution, root))
     diagnostics.extend(_check_path_remote_pushes(index, solution))
     diagnostics.extend(_check_value_references(index))
-    diagnostics.extend(_check_paths(index, root))
+    diagnostics.extend(_check_paths(index, root, solution))
     diagnostics.extend(check_version_composition(index, resolved, version_matrix))
     diagnostics.extend(check_unreferenced_documents(index, resolved))
     diagnostics.extend(check_unused_bases(index))
@@ -202,7 +205,7 @@ def _check_deployments(
         if workspace is not None:
             service = DeploymentService.from_model(deployment)
             diagnostics.extend(service.validate_stages_against_workspace(workspace), source=str(entry.source))
-        diagnostics.extend(_check_deployment_layers(index, entry, deployment, root), source=str(entry.source))
+        diagnostics.extend(_check_deployment_layers(index, entry, deployment, root, solution), source=str(entry.source))
         diagnostics.extend(_check_deployment_tenant_geography(index, deployment), source=str(entry.source))
         diagnostics.extend(
             _check_deployment_provider_bindings(index, deployment, uses_extends=raw.spec.extends is not None),
@@ -540,7 +543,11 @@ def _single_configuration(index: DocumentIndex) -> ConfigurationModel | None:
 
 
 def _check_deployment_layers(
-    index: DocumentIndex, entry: IndexEntry, deployment: DeploymentModel, root: Path | None
+    index: DocumentIndex,
+    entry: IndexEntry,
+    deployment: DeploymentModel,
+    root: Path | None,
+    solution: SolutionModel | None = None,
 ) -> Diagnostics:
     """Cross-check `Deployment.spec.layers` against the deployment document's
     own real file path (docs/design/path-conventions.md Phase 3) — the check
@@ -548,6 +555,14 @@ def _check_deployment_layers(
     mean something. Validation only, never mutates `segments` — auto-
     derivation when absent is deliberately out of scope (no consumer of
     `layers` exists yet to feed).
+
+    The path is relative to the root the document was discovered in, as in
+    `_check_paths()`. A file the followed convention does not describe is
+    `layers_follows_unmatched`: outside its scope, or in scope while another
+    convention's pattern matches it. Either way `_check_paths()` never holds
+    the file to the followed convention, so without this a misplaced leaf
+    would pass. A file no in-scope convention matches is left to
+    `_check_paths()`'s own `path_convention_mismatch`.
     """
     diagnostics = Diagnostics()
     layers = deployment.spec.layers
@@ -568,18 +583,38 @@ def _check_deployment_layers(
         )
         return diagnostics
 
+    relative = _discovered_relative_path(entry.source, _discovery_roots(root, solution))
+    if relative is None:
+        return diagnostics
+    severity = diagnostics.error if convention.enforcement == "deny" else diagnostics.warning
+    covered = in_scope(relative, convention.scope)
+    match = match_directory(relative, convention.pattern) if covered else None
+    if match is None:
+        in_scope_conventions = [c for c in configuration.spec.paths or [] if in_scope(relative, c.scope)]
+        other = _matching_convention(relative, in_scope_conventions)
+        if not covered:
+            severity(
+                f"Deployment '{deployment.meta.name}': layers.follows names path convention '{convention.name}', "
+                f"but its file '{relative}' is outside that convention's scope '{convention.scope}', so its path "
+                "is never checked against it.",
+                code="layers_follows_unmatched",
+                hint=f"Move the file under '{convention.scope}' where '{convention.pattern}' puts it, or set "
+                "layers.follows to the convention its path does follow.",
+            )
+        elif other is not None:
+            severity(
+                f"Deployment '{deployment.meta.name}': layers.follows names path convention '{convention.name}', "
+                f"but its file '{relative}' does not match that convention's pattern '{convention.pattern}' "
+                f"(it matches '{other.name}').",
+                code="layers_follows_unmatched",
+                hint=f"Move the file to where '{convention.pattern}' puts it, or set layers.follows to '{other.name}'.",
+            )
+        return diagnostics  # otherwise _check_paths() already reports this structural mismatch itself
+
     if not layers.segments:
         return diagnostics  # nothing declared yet to cross-check
 
-    if not entry.source.resolve().is_relative_to(root.resolve()):
-        return diagnostics  # a document remote's document: path conventions describe the solution root only
-    relative = entry.source.resolve().relative_to(root.resolve()).as_posix()
-    match = match_directory(relative, convention.pattern)
-    if match is None:
-        return diagnostics  # _check_paths() already reports this structural mismatch itself
-
     captures = match.groupdict()
-    severity = diagnostics.error if convention.enforcement == "deny" else diagnostics.warning
     for name, declared_value in layers.segments.items():
         captured_value = captures.get(name)
         if captured_value is not None and captured_value != declared_value:
@@ -2047,6 +2082,87 @@ def _check_remotes(index: DocumentIndex, solution: SolutionModel | None) -> Diag
 # ---------------------------------------------------------------------------
 
 
+def _check_remote_requires(solution: SolutionModel | None, root: Path | None) -> Diagnostics:
+    """A `path` remote's `requires` against the tag its checkout is on (docs/design/remotes.md, "Which versions a
+    solution accepts").
+
+    Read at validate, so `build run` and `deploy`, which both start with `require_valid()`, refuse a checkout outside
+    the range before taking a file from it. HEAD passes when any of its release tags is in the range
+    (`checkout_tags()`): the same tree may carry `v1.9.0` and `v2.0.0`, and the pipeline may have named either.
+
+    - Release tags none of which is in the range, or tags none of which is a release: `remote_requires_unmet`, an
+      error.
+    - A branch, a bare commit, or a folder that is not a git checkout: `remote_requires_unchecked`, an info. A
+      sandbox following `dev` is a deliberate layout, and a warning would fail `validate --strict` for it.
+    - A git checkout whose tags `git` could not read: `remote_requires_unchecked`, a warning naming git's error, so
+      a broken read never passes quietly as "no tag".
+    - A checkout that is not there is skipped: a developer may validate without every checkout, and the build
+      reports a missing one where it needs its files.
+    """
+    diagnostics = Diagnostics()
+    if solution is None or root is None:
+        return diagnostics
+    source = str(manifest_path(root))
+    for position, remote in enumerate(solution.spec.remotes or []):
+        if remote.requires is None or remote.path is None:
+            continue
+        checkout = path_remote_location(root, remote.path)
+        if not checkout.is_dir():
+            continue
+        location = f"spec.remotes.{position}.requires"
+        found = checkout_tags(checkout)
+        tags = found.tags
+        releases = [tag for tag in tags if is_release_tag(tag)]
+        if found.problem is not None and (checkout / ".git").exists():
+            diagnostics.warning(
+                f"Remote '{remote.name}': {found.problem}, so requires '{remote.requires}' is not checked.",
+                source=source,
+                location=location,
+                code="remote_requires_unchecked",
+                hint=f"Make '{checkout}' readable to git for this user (for example "
+                "'git config --global --add safe.directory <path>').",
+            )
+        elif releases:
+            if not any(version_satisfies(tag, remote.requires) for tag in releases):
+                named = f"tag '{releases[0]}'" if len(releases) == 1 else f"tags {', '.join(map(repr, releases))}"
+                diagnostics.error(
+                    f"Remote '{remote.name}': its checkout at '{checkout}' is on {named}, outside "
+                    f"requires '{remote.requires}'.",
+                    source=source,
+                    location=location,
+                    code="remote_requires_unmet",
+                    hint="Check out a tag in the range, or change 'requires' if this version was tested with the "
+                    "solution.",
+                )
+        elif tags:
+            diagnostics.error(
+                f"Remote '{remote.name}': its checkout at '{checkout}' is on tag "
+                f"{', '.join(repr(tag) for tag in tags)}, which is not a release version, so it cannot meet "
+                f"requires '{remote.requires}'.",
+                source=source,
+                location=location,
+                code="remote_requires_unmet",
+                hint="Check out a release tag such as 'v1.4.0'.",
+            )
+        else:
+            branch = checkout_branch(checkout) if found.problem is None else None
+            state = (
+                f"is on branch '{branch}'"
+                if branch
+                else "is on a commit no tag names"
+                if found.problem is None
+                else "is not a git checkout"
+            )
+            diagnostics.info(
+                f"Remote '{remote.name}': its checkout at '{checkout}' {state}, not a version tag, so requires "
+                f"'{remote.requires}' is not checked.",
+                source=source,
+                location=location,
+                code="remote_requires_unchecked",
+            )
+    return diagnostics
+
+
 def _check_remote_integrations(index: DocumentIndex, solution: SolutionModel | None, root: Path | None) -> Diagnostics:
     """Every manifest remote's `integration` names a real document that declares `sources`.
 
@@ -2347,11 +2463,17 @@ def _check_value_references(index: DocumentIndex) -> Diagnostics:
 # ---------------------------------------------------------------------------
 
 
-def _check_paths(index: DocumentIndex, root: Path | None) -> Diagnostics:
+def _check_paths(index: DocumentIndex, root: Path | None, solution: SolutionModel | None = None) -> Diagnostics:
     """Every document's real, on-disk location matches whichever declared
     `PathConventionModel` covers it (structural shape only — the generic
     `validate:` sub-block v1 also had is deliberately not ported, see the
     design doc's "What's already solved differently").
+
+    A document's path is taken relative to the root it was discovered in:
+    the solution root, or the `spec.discovery.remotes` checkout it came from
+    (`_discovered_relative_path()`), as `discovery.exclude` already is. So a
+    convention written as `deploy/hubs/{hub}/...` judges a leaf whether the
+    pipeline checked its repository out beside the solution or inside it.
 
     Skips entirely without a single `Configuration` document declaring
     `spec.paths`, or without `root` (needed to compute each document's path
@@ -2365,33 +2487,73 @@ def _check_paths(index: DocumentIndex, root: Path | None) -> Diagnostics:
     if configuration is None or not configuration.spec.paths:
         return diagnostics
 
-    resolved_root = root.resolve()
+    roots = _discovery_roots(root, solution)
     for entry in index.all():
-        if not entry.source.resolve().is_relative_to(resolved_root):
-            continue  # a document remote's document (spec.discovery.remotes): conventions describe the root only
-        relative = entry.source.resolve().relative_to(resolved_root).as_posix()
+        relative = _discovered_relative_path(entry.source, roots)
+        if relative is None:
+            continue
         in_scope_conventions = [c for c in configuration.spec.paths if in_scope(relative, c.scope)]
         if not in_scope_conventions:
             continue
-        convention = _resolve_matching_convention(relative, in_scope_conventions)
+        convention = _matching_convention(relative, in_scope_conventions) or _fallback_convention(
+            entry, in_scope_conventions
+        )
         diagnostics.extend(
             _check_document_against_path_convention(entry, relative, convention), source=str(entry.source)
         )
     return diagnostics
 
 
-def _resolve_matching_convention(relative: str, candidates: list[PathConventionModel]) -> PathConventionModel:
-    """Pick which in-scope convention governs `relative`'s shape check.
+def _discovery_roots(root: Path, solution: SolutionModel | None) -> list[Path]:
+    """The folders documents are discovered in, each resolved: every `spec.discovery.remotes` checkout, then the
+    solution root.
 
-    Scope alone no longer picks a winner outright: several conventions can
+    Checkouts come first because one may sit inside the solution root (`repos/<name>`), and its documents belong to
+    it, as the walk in `SolutionController.load()` already decides. Listed checkouts never overlap each other
+    (`document_remote_overlaps`), so the order among them does not matter.
+    """
+    remotes = {remote.name: remote for remote in ((solution.spec.remotes or []) if solution else [])}
+    listed = (solution.spec.discovery.remotes or []) if solution and solution.spec.discovery else []
+    checkouts = [
+        path_remote_location(root, remote.path)
+        for name in listed
+        if (remote := remotes.get(name)) is not None and remote.path is not None
+    ]
+    return [*checkouts, root.resolve()]
+
+
+def _discovered_relative_path(source: Path, roots: list[Path]) -> str | None:
+    """`source` relative to the first of `roots` that holds it, POSIX style; `None` when none does."""
+    located = source.resolve()
+    for candidate in roots:
+        if located.is_relative_to(candidate):
+            return located.relative_to(candidate).as_posix()
+    return None
+
+
+def _fallback_convention(entry: IndexEntry, candidates: list[PathConventionModel]) -> PathConventionModel:
+    """The convention to report a mismatch against when none of `candidates` matches: the one the document declares
+    in `layers.follows`, when it is among them, else the first.
+
+    So a deployment that follows a `deny` convention is held to that convention's pattern and enforcement, not to
+    whichever `warn` convention happens to be declared first in the same scope.
+    """
+    layers = getattr(getattr(entry.model, "spec", None), "layers", None)
+    follows = getattr(layers, "follows", None)
+    return next((c for c in candidates if c.name == follows), candidates[0])
+
+
+def _matching_convention(relative: str, candidates: list[PathConventionModel]) -> PathConventionModel | None:
+    """The first of `candidates` whose directory (and filename, when set) pattern matches `relative`.
+
+    Scope alone does not pick a winner: several conventions can
     legitimately share the same scope prefix to describe different depths of
     the same hierarchy (e.g. a `deploy/hubs/**` scope with one convention per
     depth — spoke-wide, customer-wide, ring-wide, instance-wide — each a
-    real, intentional file location, not a mismatch). Try every in-scope
-    convention's own directory/filename pattern, in declaration order, and
-    use the first one whose shape actually matches this document's real
-    path. If none match, fall back to the first in-scope convention
-    (declaration order) so `_check_document_against_path_convention()` still
+    real, intentional file location, not a mismatch). So every in-scope
+    convention's own directory/filename pattern is tried, in declaration
+    order. When none matches, `_check_paths()` falls back to the first
+    in-scope convention so `_check_document_against_path_convention()` still
     has a concrete convention to report the mismatch against.
     """
     for candidate in candidates:
@@ -2399,7 +2561,7 @@ def _resolve_matching_convention(relative: str, candidates: list[PathConventionM
         filename_match = match_filename(relative, candidate.filename_pattern) if candidate.filename_pattern else None
         if directory_match is not None and (not candidate.filename_pattern or filename_match is not None):
             return candidate
-    return candidates[0]
+    return None
 
 
 def _check_document_against_path_convention(

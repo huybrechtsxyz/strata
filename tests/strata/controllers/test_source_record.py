@@ -49,7 +49,7 @@ def solution(tmp_path: Path) -> tuple[Path, str]:
     return root, head
 
 
-def test_a_path_remote_is_recorded_with_no_ref(tmp_path: Path, solution: tuple[Path, str]):
+def test_a_path_remote_is_recorded_with_the_branch_it_is_on(tmp_path: Path, solution: tuple[Path, str]):
     root, head = solution
     infra_head = _repository(tmp_path / "infra", {"modules/main.tf": "# v1\n"})
     record = SourceRecord()
@@ -60,10 +60,60 @@ def test_a_path_remote_is_recorded_with_no_ref(tmp_path: Path, solution: tuple[P
     provenance = record.provenance(root, root / "build", head, diagnostics)
 
     assert provenance["remotes"] == {
-        "infra": {"url": "https://git.example.com/infra.git", "ref": None, "commit": infra_head, "dirty": False}
+        "infra": {"url": "https://git.example.com/infra.git", "ref": "main", "commit": infra_head, "dirty": False}
     }
-    assert provenance["solution"] == {"commit": head, "dirty": False}
+    assert provenance["solution"] == {"ref": "main", "commit": head, "dirty": False}
     assert diagnostics.warnings == []
+
+
+def _path_remote_ref(tmp_path: Path, root: Path, head: str) -> object:
+    record = SourceRecord()
+    record.resolved("infra", _remote("infra", path="../infra"), tmp_path / "infra")
+    record.took(tmp_path / "infra", "main.tf")
+    return record.provenance(root, root / "build", head, Diagnostics())["remotes"]["infra"]["ref"]
+
+
+def test_a_path_remote_on_a_tag_is_recorded_with_the_tag(tmp_path: Path, solution: tuple[Path, str]):
+    """R3: the pipeline checks the platform out at its release tag, detached."""
+    root, head = solution
+    _repository(tmp_path / "infra", {"main.tf": "# v1\n"})
+    _git(tmp_path / "infra", "tag", "-a", "v1.0.0", "-m", "1.0.0")
+    _git(tmp_path / "infra", "checkout", "--detach", "v1.0.0")
+
+    assert _path_remote_ref(tmp_path, root, head) == "v1.0.0"
+
+
+def test_a_tag_wins_over_the_branch_and_the_highest_version_over_other_tags(tmp_path: Path, solution: tuple[Path, str]):
+    root, head = solution
+    _repository(tmp_path / "infra", {"main.tf": "# v1\n"})
+    for tag in ("v1.4.0-rc1", "v1.4.0", "v1.10.0", "latest"):
+        _git(tmp_path / "infra", "tag", tag)
+
+    assert _path_remote_ref(tmp_path, root, head) == "v1.10.0"
+
+
+def test_a_detached_path_remote_on_no_tag_records_no_ref(tmp_path: Path, solution: tuple[Path, str]):
+    """The commit already says which tree it was; a pipeline checkout at a commit has no other name."""
+    root, head = solution
+    infra_head = _repository(tmp_path / "infra", {"main.tf": "# v1\n"})
+    _git(tmp_path / "infra", "checkout", "--detach", infra_head)
+
+    assert _path_remote_ref(tmp_path, root, head) is None
+
+
+def test_the_solution_ref_is_left_out_when_the_recorded_commit_is_not_head(solution: tuple[Path, str]):
+    """The commit came from a CI variable (a pull request's merge commit): HEAD's branch would name another commit."""
+    root, _ = solution
+
+    assert record_solution(root, "a" * 40, Diagnostics())["ref"] is None
+
+
+def test_the_solution_on_a_tag_is_recorded_with_the_tag(solution: tuple[Path, str]):
+    root, head = solution
+    _git(root, "tag", "-a", "v2.3.0", "-m", "2.3.0")
+    _git(root, "checkout", "--detach", "v2.3.0")
+
+    assert record_solution(root, head, Diagnostics())["ref"] == "v2.3.0"
 
 
 def test_a_ref_mode_remote_records_its_ref(tmp_path: Path, solution: tuple[Path, str]):
@@ -170,7 +220,7 @@ def test_the_solution_is_dirty_with_an_edited_document(solution: tuple[Path, str
     (root / "strata.yaml").write_text("kind: solution\n# edited\n", encoding="utf-8")
     diagnostics = Diagnostics()
 
-    assert record_solution(root, head, diagnostics) == {"commit": head, "dirty": True}
+    assert record_solution(root, head, diagnostics) == {"ref": "main", "commit": head, "dirty": True}
     assert _codes(diagnostics) == ["remote_checkout_dirty"]
     assert "solution repository" in diagnostics.warnings[0].message
 
@@ -186,7 +236,7 @@ def test_the_build_output_and_strata_folder_do_not_make_the_solution_dirty(solut
 
     provenance = SourceRecord().provenance(root, root / "out" / "dev", head, diagnostics)
 
-    assert provenance["solution"] == {"commit": head, "dirty": False}
+    assert provenance["solution"] == {"ref": "main", "commit": head, "dirty": False}
     assert diagnostics.warnings == []
 
 
@@ -204,7 +254,11 @@ def test_the_solution_root_may_be_a_folder_of_its_repository(tmp_path: Path):
     head = _repository(tmp_path / "repo", {"platform/strata.yaml": "kind: solution\n", "other/x.txt": "x\n"})
     (tmp_path / "repo" / "other" / "x.txt").write_text("changed\n", encoding="utf-8")
 
-    assert record_solution(tmp_path / "repo" / "platform", head, Diagnostics()) == {"commit": head, "dirty": False}
+    assert record_solution(tmp_path / "repo" / "platform", head, Diagnostics()) == {
+        "ref": "main",
+        "commit": head,
+        "dirty": False,
+    }
 
 
 def test_a_solution_outside_git_records_nulls_without_a_warning(tmp_path: Path):
@@ -212,7 +266,7 @@ def test_a_solution_outside_git_records_nulls_without_a_warning(tmp_path: Path):
     (tmp_path / "plain").mkdir()
     diagnostics = Diagnostics()
 
-    assert record_solution(tmp_path / "plain", None, diagnostics) == {"commit": None, "dirty": None}
+    assert record_solution(tmp_path / "plain", None, diagnostics) == {"ref": None, "commit": None, "dirty": None}
     assert diagnostics.warnings == []
 
 
@@ -249,9 +303,15 @@ def test_the_build_record_reads_back_what_provenance_wrote(tmp_path: Path, solut
     read = read_build_record(build_path)
 
     assert read is not None
-    assert (read.solution_commit, read.solution_dirty) == (head, False)
+    assert (read.solution_ref, read.solution_commit, read.solution_dirty) == ("main", head, False)
     assert read.remotes["infra"].commit == infra_head and read.remotes["infra"].dirty is False
-    assert read.remotes["infra"].ref is None
+    assert read.remotes["infra"].ref == "main"
+
+
+def test_a_record_written_before_the_solution_ref_reads_as_no_ref(tmp_path: Path):
+    read = read_build_record(_build(tmp_path, _record()))
+
+    assert read is not None and read.solution_ref is None and read.solution_commit == _CLEAN["commit"]
 
 
 @pytest.mark.parametrize(
@@ -263,9 +323,19 @@ def test_the_build_record_reads_back_what_provenance_wrote(tmp_path: Path, solut
         {"solution": "5d0e", "remotes": {}},
         {"solution": {"commit": 5, "dirty": False}, "remotes": {}},
         {"solution": {"commit": "5d0e", "dirty": "no"}, "remotes": {}},
+        {"solution": {**_CLEAN, "ref": 1}, "remotes": {}},
         {"solution": _CLEAN, "remotes": {"infra": {"url": "u", "unknown": 1}}},
     ],
-    ids=["no-keys", "no-solution", "no-remotes", "solution-not-a-map", "bad-commit", "bad-dirty", "bad-entry"],
+    ids=[
+        "no-keys",
+        "no-solution",
+        "no-remotes",
+        "solution-not-a-map",
+        "bad-commit",
+        "bad-dirty",
+        "bad-ref",
+        "bad-entry",
+    ],
 )
 def test_a_resolved_yaml_without_a_readable_record_is_an_older_build(tmp_path: Path, record):
     assert read_build_record(_build(tmp_path, record)) is None

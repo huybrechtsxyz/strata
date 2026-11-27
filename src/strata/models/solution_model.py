@@ -60,6 +60,7 @@ from strata.utils.path_safety import (
     validate_not_option_like,
     validate_relative_path,
 )
+from strata.utils.version_constraints import parse_version_constraint
 
 
 class RemoteType(str, Enum):
@@ -180,6 +181,7 @@ class SolutionRemoteModel(PlatformBaseModel):
         "`integration` and a non-default `fetch` are not allowed.",
         "`url` must not embed credentials or start with `-`; put credentials in an Integration and "
         "name it in `integration`.",
+        "`requires` is only valid with `path`, and must be a version range such as `>=1.4.0 <2.0.0`.",
     )
 
     name: PlatformName = Field(
@@ -227,6 +229,17 @@ class SolutionRemoteModel(PlatformBaseModel):
         "the ref it checked out and link its checkout there. Not keyed by ref: a version pin "
         "cannot apply to it (ADR-0019 rule 4), so there is only ever one tree.",
     )
+    requires: str | None = Field(
+        None,
+        min_length=1,
+        description="The versions of this repository the solution accepts, for a `path` remote: a range over the "
+        "tag its checkout is on, such as `>=1.4.0 <2.0.0` (clauses separated by a space or a comma; `~>` and "
+        "`~=` work too). Validation fails when the checkout is on a version tag outside the range, or on a tag that "
+        "is not a version, and reports an info finding when it is on a branch or a bare commit (a sandbox following "
+        "`dev`). A `v` prefix on the tag is fine, and a prerelease tag counts (`1.5.0-rc1` is in the range above).\n\n"
+        'Design notes: docs/design/remotes.md, "Which versions a solution accepts". Only with `path`: a '
+        "`reference` remote names its version in this same file.",
+    )
     fetch: RemoteFetch = Field(
         default=RemoteFetch.STRATA,
         description="Who materialises this remote on disk: 'strata' (default) fetches it, 'external' means "
@@ -258,6 +271,15 @@ class SolutionRemoteModel(PlatformBaseModel):
         if v is not None:
             validate_no_path_traversal(v)
             validate_not_option_like(v, "reference")
+        return v
+
+    @field_validator("requires")
+    @classmethod
+    def validate_requires_is_a_range(cls, v: str | None) -> str | None:
+        """A range `parse_version_constraint()` reads, so a typo fails at load, not at the first tagged checkout."""
+        if v is not None and not str(parse_version_constraint(v)):
+            # Only blanks: an empty range accepts every version, so the guard would look set and never fail.
+            raise ValueError(f"'{v}' is not a version constraint: it is empty (example: '>=1.4.0 <2.0.0')")
         return v
 
     @field_validator("url")
@@ -312,6 +334,11 @@ class SolutionRemoteModel(PlatformBaseModel):
         --strict` for exactly that layout).
         """
         if self.path is None:
+            if self.requires is not None:
+                raise ValueError(
+                    f"Remote '{self.name}': 'requires' is only valid with 'path'. A remote with a 'reference' names "
+                    "its version here already."
+                )
             return self
         if self.type is not RemoteType.GIT:
             raise ValueError(f"Remote '{self.name}': 'path' is only valid for type 'git'.")

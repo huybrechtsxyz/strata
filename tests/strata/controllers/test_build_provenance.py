@@ -154,9 +154,9 @@ def test_a_path_remote_and_the_solution_are_recorded(tmp_path: Path):
     resolved, diagnostics = _build(root, tmp_path / "build")
 
     assert resolved["remotes"] == {
-        "infra": {"url": "https://git.example.com/infra.git", "ref": None, "commit": infra_head, "dirty": False}
+        "infra": {"url": "https://git.example.com/infra.git", "ref": "main", "commit": infra_head, "dirty": False}
     }
-    assert resolved["solution"] == {"commit": root_head, "dirty": False}
+    assert resolved["solution"] == {"ref": "main", "commit": root_head, "dirty": False}
     assert _codes(diagnostics) == []
 
 
@@ -228,11 +228,11 @@ def test_a_local_remote_and_the_solution_itself_are_covered_by_the_solution_reco
 
     resolved, _ = _build(root, tmp_path / "build")
     assert resolved["remotes"] == {}
-    assert resolved["solution"] == {"commit": root_head, "dirty": False}
+    assert resolved["solution"] == {"ref": "main", "commit": root_head, "dirty": False}
 
     (root / "shared" / "infra" / "main.tf").write_text("# changed\n", encoding="utf-8")
     resolved, diagnostics = _build(root, tmp_path / "build")
-    assert resolved["solution"] == {"commit": root_head, "dirty": True}
+    assert resolved["solution"] == {"ref": "main", "commit": root_head, "dirty": True}
     assert _codes(diagnostics) == ["remote_checkout_dirty"]
 
 
@@ -253,7 +253,7 @@ def test_a_build_output_inside_the_solution_does_not_make_it_dirty(tmp_path: Pat
 
     resolved, diagnostics = _build(root, root / "out" / "app")
 
-    assert resolved["solution"] == {"commit": root_head, "dirty": False}
+    assert resolved["solution"] == {"ref": "main", "commit": root_head, "dirty": False}
     assert _codes(diagnostics) == []
 
 

@@ -222,21 +222,75 @@ def test_two_document_remotes_that_overlap_fail(tmp_path: Path):
     assert "'zone01'" in error.message and "'zones'" in error.message
 
 
-def test_path_conventions_judge_only_documents_under_the_solution_root(tmp_path: Path):
-    """`spec.paths` describes the solution's own layout; a zone document is outside it, not in breach of it."""
-    root, _ = _solution(tmp_path)
+_SPOKES = (
+    f"{_API}kind: configuration\nmeta:\n  name: cfg\nspec:\n  paths:\n    - name: spokes\n"
+    '      scope: "deploy/hubs/**"\n      pattern: "deploy/hubs/{zone}/{spoke}"\n'
+)
+
+
+def _leaf(checkout: Path, folder: str, *, follows: bool = True, spoke: str = "s01") -> None:
+    """The zone's deployment at `folder`, declaring the `spokes` convention and the spoke it belongs to."""
+    (checkout / "spoke" / "deploy-spoke.yaml").unlink()
+    layers = f"  layers:\n    follows: spokes\n    segments:\n      spoke: {spoke}\n" if follows else ""
     _write(
-        root,
-        "configuration.yaml",
-        f"{_API}kind: configuration\nmeta:\n  name: cfg\nspec:\n  paths:\n    - name: spokes\n"
-        '      scope: "spoke/**"\n      pattern: "deploy/hubs/{zone}/{spoke}"\n',
+        checkout,
+        f"{folder}/deploy-spoke.yaml",
+        f"{_API}kind: deployment\nmeta:\n  name: zone01-spoke\nspec:\n  workspace: main\n"
+        f"  environments:\n    - zone01-hub\n{layers}",
     )
 
+
+def _findings(root: Path) -> list:
     context = open_solution(root)
     assert context.ok, context.diagnostics.messages()
     context.resolve()
+    return [d for d in context.diagnostics.items if d.code and ("path_convention" in d.code or "layers" in d.code)]
 
-    assert [d for d in context.diagnostics.items if "zone01-spoke" in d.message] == []
+
+@pytest.mark.parametrize("zone_path", ["../config-zone01", "repos/config-zone01"], ids=["beside", "inside"])
+def test_path_conventions_judge_a_document_remote_relative_to_its_own_checkout(tmp_path: Path, zone_path: str):
+    """R2: a convention written as `deploy/hubs/...` judges a zone leaf wherever the pipeline checked the zone out."""
+    root, checkout = _solution(tmp_path, zone_path=zone_path, exclude=["repos/**"])
+    _write(root, "configuration.yaml", _SPOKES)
+    _leaf(checkout, "deploy/hubs/zone01/s01")
+
+    assert _findings(root) == []
+
+
+@pytest.mark.parametrize("zone_path", ["../config-zone01", "repos/config-zone01"], ids=["beside", "inside"])
+def test_a_renamed_folder_in_a_document_remote_is_layers_drift(tmp_path: Path, zone_path: str):
+    """R2's reproduction: the folder no longer names the spoke the deployment declares, in either layout."""
+    root, checkout = _solution(tmp_path, zone_path=zone_path, exclude=["repos/**"])
+    _write(root, "configuration.yaml", _SPOKES)
+    _leaf(checkout, "deploy/hubs/zone01/xyz")
+
+    [finding] = _findings(root)
+
+    assert finding.code == "path_convention_layers_drift"
+    assert "'spoke' = 'xyz'" in finding.message
+    assert finding.source == str(checkout / "deploy" / "hubs" / "zone01" / "xyz" / "deploy-spoke.yaml")
+
+
+def test_a_document_remote_leaf_outside_its_conventions_scope_is_never_silent(tmp_path: Path):
+    """R2: `layers.follows` names a convention whose scope the file is not in."""
+    root, checkout = _solution(tmp_path)
+    _write(root, "configuration.yaml", _SPOKES)
+    _leaf(checkout, "leaves/zone01/s01")
+
+    [finding] = _findings(root)
+
+    assert finding.code == "layers_follows_unmatched"
+    assert "'leaves/zone01/s01/deploy-spoke.yaml' is outside that convention's scope 'deploy/hubs/**'" in (
+        finding.message
+    )
+
+
+def test_a_document_remote_leaf_without_layers_is_still_judged_by_the_convention(tmp_path: Path):
+    root, checkout = _solution(tmp_path)
+    _write(root, "configuration.yaml", _SPOKES)
+    _leaf(checkout, "deploy/hubs/zone01", follows=False)
+
+    assert [d.code for d in _findings(root)] == ["path_convention_mismatch"]
 
 
 def test_without_discovery_remotes_a_path_remote_is_not_scanned(tmp_path: Path):
@@ -279,11 +333,25 @@ def test_the_build_records_the_commit_of_each_document_remote(tmp_path: Path):
 
     assert resolved["remotes"]["config-zone01"] == {
         "url": "https://git.example.com/config-zone01.git",
-        "ref": None,
+        "ref": "main",  # the branch the checkout is on (R3)
         "commit": head,
         "dirty": False,
     }
     assert [w.code for w in diagnostics.warnings if w.code == "remote_checkout_dirty"] == []
+
+
+@_needs_git
+def test_the_build_records_the_tag_a_document_remote_is_checked_out_at(tmp_path: Path):
+    """R3: a pipeline checks the zone out at a release tag, detached, as a CI checkout is."""
+    root, checkout = _solution(tmp_path)
+    head = _committed(checkout)
+    _git(checkout, "tag", "-a", "v1.0.0", "-m", "1.0.0")
+    _git(checkout, "checkout", "--detach", "v1.0.0")
+
+    resolved, _ = _build(root, tmp_path)
+
+    assert resolved["remotes"]["config-zone01"]["ref"] == "v1.0.0"
+    assert resolved["remotes"]["config-zone01"]["commit"] == head
 
 
 @_needs_git

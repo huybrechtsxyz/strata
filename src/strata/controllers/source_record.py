@@ -20,7 +20,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from strata.controllers.checkout_state import CheckoutState, checkout_state
+from strata.controllers.checkout_state import CheckoutState, checkout_ref, checkout_state
 from strata.models.audit_manifest_model import ManifestRepositoryModel
 from strata.models.solution_model import RemoteType, SolutionRemoteModel
 from strata.utils import layout
@@ -41,6 +41,8 @@ class _Remote:
     ref: str | None
     checkout: Path
     paths: list[str] = field(default_factory=list)
+    #: A path remote: the pipeline chose the ref, so the record reads it from the checkout.
+    ref_from_checkout: bool = False
 
 
 class SourceRecord:
@@ -53,9 +55,11 @@ class SourceRecord:
         """Register `remote`'s `checkout` under `key` (the remote's name, or `asset:<name>`). Only `type: git`."""
         if remote.type != RemoteType.GIT or key in self._remotes:
             return
-        # Path mode: the pipeline owns the ref, so none is written (docs/design/remotes.md).
-        ref = None if remote.path is not None else remote.reference
-        self._remotes[key] = _Remote(remote.url, ref, checkout.resolve())
+        # Path mode: the pipeline owns the ref (docs/design/remotes.md), so `provenance()` reads it from the checkout.
+        if remote.path is not None:
+            self._remotes[key] = _Remote(remote.url, None, checkout.resolve(), ref_from_checkout=True)
+        else:
+            self._remotes[key] = _Remote(remote.url, remote.reference, checkout.resolve())
 
     def took(self, checkout: Path, path: str, *, glob: bool = False) -> None:
         """Add `path`, relative to `checkout`, to every remote registered at `checkout`.
@@ -69,7 +73,10 @@ class SourceRecord:
                 remote.paths.append(pathspec)
 
     def provenance(self, root: Path, build_path: Path, commit: str | None, diagnostics: Diagnostics) -> dict[str, Any]:
-        """`{"solution": {commit, dirty}, "remotes": {key: {url, ref, commit, dirty}}}` for `resolved.yaml`.
+        """`{"solution": {ref, commit, dirty}, "remotes": {key: {url, ref, commit, dirty}}}` for `resolved.yaml`.
+
+        A path remote's `ref`, and the solution's, is what its checkout is on (`checkout_ref()`): the exact tag,
+        else the branch, else null. A `reference` remote's is the reference after version pins.
 
         Args:
             root: The solution root.
@@ -85,7 +92,8 @@ class SourceRecord:
             if not remote.paths:
                 continue
             state = checkout_state(remote.checkout, remote.paths)
-            remotes[key] = {"url": remote.url, "ref": remote.ref, "commit": state.commit, "dirty": state.dirty}
+            ref = checkout_ref(remote.checkout) if remote.ref_from_checkout and state.commit else remote.ref
+            remotes[key] = {"url": remote.url, "ref": ref, "commit": state.commit, "dirty": state.dirty}
             _warn(_label(key), remote.checkout, state, diagnostics)
 
         exclude = [layout.STRATA_DIR]
@@ -97,10 +105,11 @@ class SourceRecord:
         # The commit is the SBOM's (a CI variable first); `git` only answers `dirty`. A solution outside git gets
         # nulls but no warning, as the SBOM does: it is the default case for an example or a test, not a gap in
         # one record (require_remote_commits, Phase 4, makes it an error).
+        ref = checkout_ref(root, enclosing=True) if _same_commit(state.commit, commit) else None
         state = CheckoutState(commit, state.dirty if state.commit else None, state.problem)
         if commit is not None:
             _warn(_SOLUTION_LABEL, root, state, diagnostics)
-        return {"solution": {"commit": commit, "dirty": state.dirty}, "remotes": remotes}
+        return {"solution": {"ref": ref, "commit": commit, "dirty": state.dirty}, "remotes": remotes}
 
 
 @dataclass(frozen=True)
@@ -110,6 +119,8 @@ class BuildRecord:
     solution_commit: str | None
     solution_dirty: bool | None
     remotes: dict[str, ManifestRepositoryModel]
+    #: Absent from a build made before the solution's ref was recorded, which reads as `None`.
+    solution_ref: str | None = None
 
 
 def read_build_record(build_path: Path) -> BuildRecord | None:
@@ -128,13 +139,14 @@ def read_build_record(build_path: Path) -> BuildRecord | None:
     solution, remotes = resolved.get("solution"), resolved.get("remotes")
     if not isinstance(solution, dict) or not isinstance(remotes, dict):
         return None
-    commit, dirty = solution.get("commit"), solution.get("dirty")
-    if not isinstance(commit, str | None) or not isinstance(dirty, bool | None):
+    commit, dirty, ref = solution.get("commit"), solution.get("dirty"), solution.get("ref")
+    if not isinstance(commit, str | None) or not isinstance(dirty, bool | None) or not isinstance(ref, str | None):
         return None
     try:
         return BuildRecord(
             solution_commit=commit,
             solution_dirty=dirty,
+            solution_ref=ref,
             remotes={str(key): ManifestRepositoryModel.model_validate(entry) for key, entry in remotes.items()},
         )
     except ValidationError:
@@ -179,6 +191,20 @@ def _require(label: str, commit: str | None, dirty: bool | None, diagnostics: Di
             code=_DIRTY,
             hint="Commit the change, build again from a clean checkout, then deploy that build.",
         )
+
+
+def solution_ref(root: Path, commit: str | None) -> str | None:
+    """The tag or branch of the solution's checkout, when its HEAD is `commit`; else `None`.
+
+    `commit` is `built_commit_sha()`'s, which takes a CI variable first. When that is not the local HEAD (a pull
+    request's merge commit, say), the checkout's tag or branch would name another commit, so none is given.
+    """
+    head = checkout_state(root, enclosing=True).commit
+    return checkout_ref(root, enclosing=True) if _same_commit(head, commit) else None
+
+
+def _same_commit(head: str | None, commit: str | None) -> bool:
+    return head is not None and commit is not None and head.lower() == commit.lower()
 
 
 def _label(key: str) -> str:

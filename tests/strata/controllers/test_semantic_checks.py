@@ -2643,6 +2643,93 @@ spec:
     assert not context.diagnostics.warnings
 
 
+def test_layers_follows_a_convention_whose_scope_the_file_is_outside(tmp_path):
+    """Neither check held the file to `control-path` before: `_check_paths()` judges only in-scope conventions."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(
+        root, CONTROL_PATH_CONVENTION.replace("resolves: layers", "resolves: layers\n      enforcement: deny")
+    )
+    _write(
+        root,
+        "elsewhere/dev/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="control-path", segments={"control": "dev"}),
+    )
+
+    context = _resolve(root)
+
+    [error] = [d for d in context.diagnostics.errors if d.code == "layers_follows_unmatched"]
+    assert "'elsewhere/dev/deployment.yaml' is outside that convention's scope 'deploy/control/**'" in error.message
+    assert error.hint is not None and "layers.follows" in error.hint
+
+
+def test_layers_follows_a_convention_while_the_file_matches_another(tmp_path):
+    """Two conventions share a scope at different depths: the file sits at the other one's depth."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(
+        root,
+        """  paths:
+    - name: control-path
+      scope: "deploy/control/**"
+      pattern: "deploy/control/{control}/{ring}"
+    - name: control-wide
+      scope: "deploy/control/**"
+      pattern: "deploy/control/{control}"
+""",
+    )
+    _write(
+        root,
+        "deploy/control/dev/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="control-path", segments={"control": "dev"}),
+    )
+
+    context = _resolve(root)
+
+    assert [d.code for d in context.diagnostics.warnings] == ["layers_follows_unmatched"]
+    assert "(it matches 'control-wide')" in context.diagnostics.warnings[0].message
+
+
+def test_a_mismatch_is_judged_by_the_convention_the_deployment_follows(tmp_path):
+    """Not by the first in-scope convention: a `warn` one declared first must not soften a followed `deny` one."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(
+        root,
+        """  paths:
+    - name: control-wide
+      scope: "deploy/control/**"
+      pattern: "deploy/control/{control}"
+    - name: control-path
+      scope: "deploy/control/**"
+      pattern: "deploy/control/{control}/{ring}"
+      enforcement: deny
+""",
+    )
+    _write(
+        root,
+        "deploy/control/dev/ring/extra/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="control-path", segments={"control": "dev"}),
+    )
+
+    context = _resolve(root)
+
+    [error] = [d for d in context.diagnostics.errors if d.code == "path_convention_mismatch"]
+    assert "path convention 'control-path'" in error.message
+
+
+def test_layers_follows_a_file_no_convention_matches_is_reported_once(tmp_path):
+    """`_check_paths()`'s `path_convention_mismatch` already says it; no second finding for the same file."""
+    root = _base_solution(tmp_path)
+    _append_paths_config(root, CONTROL_PATH_CONVENTION)
+    _write(
+        root,
+        "deploy/control/dev/extra/deployment.yaml",
+        _partial_layers_deployment("control-dev", follows="control-path", segments={"control": "dev"}),
+    )
+
+    context = _resolve(root)
+
+    assert [d.code for d in context.diagnostics.warnings] == ["path_convention_mismatch"]
+
+
 # ---------------------------------------------------------------------------
 # Environment -> Artifact: store: artifact references (docs/archive/
 # artifact-references.md's full-review finding)

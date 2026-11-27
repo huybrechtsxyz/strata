@@ -397,6 +397,18 @@ et al. all only produce `Diagnostics`). Auto-populating
 nothing in v2 reads `layers` for anything today, so there is nothing yet
 to feed.
 
+The file must also be one the followed convention describes. When it is
+outside that convention's `scope`, or in scope while another convention's
+pattern matches it, `_check_paths()` never holds it to the followed
+convention, so the cross-check reports `layers_follows_unmatched` (with
+the convention's `enforcement`). A file no in-scope convention matches is
+left to `path_convention_mismatch`, so it is reported once.
+
+Every path here, and in `_check_paths()`, is relative to the root the
+document was discovered in: the solution root or its
+`spec.discovery.remotes` checkout (docs/design/remote-commit-provenance.md,
+"Documents in other repositories").
+
 ## Deliberately out of scope
 
 - **The generic `validate:` sub-block** (`kind: yaml`/`kind: path`
@@ -445,5 +457,6 @@ to feed.
 - `segments` is required (schema-level) whenever `resolves: layers` - a layers-resolving convention with no declared segments could never be cross-checked against anything.
 - An unknown `layers.follows` name is an error only when a single `Configuration` document exists to check it against; absent/ambiguous Configuration still skips the whole check (same "nothing declared, nothing to check" rule used elsewhere in this codebase).
 - `scope` stays a plain string-prefix (`"<dir>/**"`) - no real counter-example in any available real workspace; revisit only if one appears.
+- 2.12.0: paths are relative to the root a document was discovered in, not always the solution root. Before, a document in a `spec.discovery.remotes` checkout was judged by no convention: a checkout beside the solution was skipped, and one inside it was judged by its path through the checkout folder, which no convention matched. A per-root mapping of paths onto conventions was considered and not built: relative to its own root is what `discovery.exclude` already does, and needs no new setting. Also new: `layers_follows_unmatched`, because a `layers.follows` naming a convention the file is not under passed silently.
 - The same `{name}` appearing in both `pattern` and `filename_pattern` is deliberately left unguarded - no real convention has ever needed a segment name in both halves.
 - v1's real `hub-path`/`control-path` conventions match only the containing directory (no filename); this implementation's `pattern` always matches the full relative path including filename - simpler and unambiguous, at the cost of a migrated `layers`-resolving convention needing an explicit trailing filename segment it didn't need in v1.

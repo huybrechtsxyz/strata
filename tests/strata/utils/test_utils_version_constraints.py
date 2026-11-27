@@ -14,6 +14,9 @@ from strata.utils.version_constraints import parse_version_constraint, version_s
         ("~> 1.9", "1.12.0", "2.0.0"),
         ("~> 1.9.0", "1.9.5", "1.10.0"),
         (">= 1.7, < 2.0", "1.7.0", "2.0.0"),
+        (">=1.4.0 <2.0.0", "1.9.9", "2.0.0"),  # clauses separated by a space, as in npm and semver ranges
+        (">= 1.4.0  < 2.0.0", "1.4.0", "1.3.9"),
+        ("~> 1.4 !=1.5.0", "1.6.0", "1.5.0"),
     ],
 )
 def test_constraints_match_like_terraform(constraint, inside, outside):

@@ -308,6 +308,31 @@ def test_solution_path_remote_accepts_a_path_outside_the_solution(path):
     assert SolutionModel.model_validate(data).spec.remotes[0].path == path
 
 
+@pytest.mark.parametrize("requires", [">=1.4.0 <2.0.0", ">=1.4.0, <2.0.0", "~> 1.4"])
+def test_solution_path_remote_accepts_a_version_range_in_requires(requires):
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote(requires=requires)]
+    assert SolutionModel.model_validate(data).spec.remotes[0].requires == requires
+
+
+@pytest.mark.parametrize("requires", ["v1.4.0", "latest", "1.4+", ","])
+def test_solution_path_remote_rejects_requires_that_is_not_a_range(requires):
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [_path_remote(requires=requires)]
+    with pytest.raises(ValidationError, match="is not a version constraint"):
+        SolutionModel.model_validate(data)
+
+
+def test_solution_requires_is_only_valid_with_path():
+    """A `reference` remote names its version in strata.yaml already; a range beside it says nothing more."""
+    data = _minimal_solution()
+    data["spec"]["remotes"] = [
+        {"name": "iac", "type": "git", "url": "https://host/iac.git", "reference": "v1.4.0", "requires": ">=1.4"}
+    ]
+    with pytest.raises(ValidationError, match="'requires' is only valid with 'path'"):
+        SolutionModel.model_validate(data)
+
+
 @pytest.mark.parametrize("bad_path", ["-iac", "--upload-pack=x", ""])
 def test_solution_path_remote_rejects_an_option_like_or_empty_path(bad_path):
     data = _minimal_solution()
