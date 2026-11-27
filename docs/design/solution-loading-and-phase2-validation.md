@@ -38,7 +38,8 @@ Service that takes the loaded target model as a parameter, called from
 | `WorkspaceService.validate_topology_components()`    | Workspace (inline `spec.topology[]`) | the loaded `TopologyConfigModel`      | `_check_workspace_topology_components()`   |
 | `ProviderService.validate_against_provider_config()` | Provider                             | the loaded `ProviderConfigModel`      | `_check_providers()`                       |
 | `ResourceService.validate_against_provider_config()` | Resource                             | the loaded `ProviderConfigModel`      | `_check_resources()`                       |
-| `WorkspaceService.validate_resource_subnets()`       | Workspace (`resource.subnet.subnet`) | the referenced Network's real subnets | `_check_workspace_subnets()`               |
+| `WorkspaceService.validate_resource_subnets()`       | Workspace (`resource.subnet.subnet`) | the referenced Network's real subnets, plus the workspace's own `spec.subnets[]` on that document | `_check_workspace_subnets()`               |
+| `WorkspaceService.validate_workspace_subnets()`      | Workspace (`spec.subnets[]`)         | the referenced Network's definitions, subnet names and literal ranges | `_check_workspace_subnets()`               |
 
 **Subnets are checked against the whole Network document.** `subnet.subnet` must be a subnet name in the union of
 every internal network in the document `subnet.network` names. A Network document may declare several

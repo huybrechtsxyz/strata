@@ -1376,6 +1376,65 @@ def test_resolve_document_value_references_unknown_name_in_a_list_is_invalid_pat
     assert diagnostics.items[0].code == "value_reference_invalid_path"
 
 
+def test_resolve_document_value_references_to_a_sized_subnet_says_it_has_no_address(tmp_path):
+    """A `prefix_length` subnet has `cidr: null` — its address is chosen at deploy
+    (docs/design/subnet-addressing.md, D7 #10). The generic "resolves to a NoneType"
+    message would mislead, so it gets its own code."""
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "network.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: network
+meta:
+  name: network
+spec:
+  networks:
+    - name: main-network
+      address_space: ["10.0.0.0/16"]
+      subnets:
+        - name: aks-nodes
+          prefix_length: 25
+""",
+    )
+    _probe(root, "${value:network.network.spec.networks.main-network.subnets.aks-nodes.cidr}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert values == {}
+    assert [d.code for d in diagnostics] == ["value_reference_no_address"]
+    assert "subnet 'aks-nodes'" in diagnostics.messages()[0]
+
+
+def test_resolve_document_value_references_to_an_unset_field_says_it_is_not_set(tmp_path):
+    """An optional field left out (here `ipam.pool`) resolves to `None`: say it is not set, rather than the
+    "whole sub-object" message meant for dicts and lists."""
+    root = _solution(tmp_path)
+    _write(
+        root,
+        "network.yaml",
+        """apiVersion: strata.huybrechts.xyz/v2
+kind: network
+meta:
+  name: network
+spec:
+  networks:
+    - name: spoke
+      ipam:
+        type: azure-avnm
+""",
+    )
+    _probe(root, "${value:network.network.spec.networks.spoke.ipam.pool}")
+    context = _context(root)
+
+    values, diagnostics = resolve_document_value_references(context.controller.index)
+
+    assert values == {}
+    assert [d.code for d in diagnostics] == ["value_reference_not_scalar"]
+    assert "not set" in diagnostics.messages()[0]
+
+
 def test_resolve_document_value_references_name_segment_on_a_scalar_list_is_invalid_path(tmp_path):
     """A non-digit segment against a list of plain scalars (e.g.
     `address_space`, no dict items to match a name against) misses the

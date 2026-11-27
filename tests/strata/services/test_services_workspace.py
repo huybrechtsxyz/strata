@@ -328,6 +328,192 @@ def test_validate_resource_subnets_ignores_resources_with_no_subnet():
     assert result.ok
 
 
+def test_validate_resource_subnets_accepts_a_subnet_the_workspace_declares_itself():
+    data = _workspace_with_subnet(subnet="app1-pe")
+    data["spec"]["subnets"] = [{"network": "main-network", "name": "app1-pe", "prefix_length": 27}]
+    service = WorkspaceService(data=data)
+    service.validate()
+
+    result = service.validate_resource_subnets({"main-network": _network_model()})
+    assert result.ok
+    assert result.messages() == []
+
+
+# ---------------------------------------------------------------------------
+# validate_workspace_subnets() — spec.subnets[] against the loaded Network
+# document (docs/design/subnet-addressing.md, D3, D7 #4 and #7).
+# ---------------------------------------------------------------------------
+
+
+def _workspace_service_with_subnets(*subnets: dict) -> WorkspaceService:
+    data = _workspace_with_subnet()
+    data["spec"]["subnets"] = list(subnets)
+    service = WorkspaceService(data=data)
+    service.validate()
+    return service
+
+
+def _two_network_document() -> NetworkModel:
+    return _network_model(
+        networks=[
+            {
+                "name": "vnet-main",
+                "address_space": ["10.0.0.0/16"],
+                "subnets": [{"name": "app", "cidr": "10.0.1.0/24"}],
+            },
+            {"name": "vnet-data", "address_space": ["10.1.0.0/16"]},
+        ]
+    )
+
+
+def _codes(result) -> list[str]:
+    return [d.code for d in result]
+
+
+def test_validate_workspace_subnets_accepts_a_subnet_in_the_only_network_of_the_document():
+    service = _workspace_service_with_subnets({"network": "main-network", "name": "app1-pe", "prefix_length": 27})
+
+    result = service.validate_workspace_subnets({"main-network": _network_model()})
+    assert result.ok
+    assert result.messages() == []
+
+
+def test_validate_workspace_subnets_accepts_a_named_definition():
+    service = _workspace_service_with_subnets(
+        {"network": "main-network", "virtual_network": "vnet-data", "name": "app1-db", "prefix_length": 24}
+    )
+
+    result = service.validate_workspace_subnets({"main-network": _two_network_document()})
+    assert result.ok
+
+
+def test_validate_workspace_subnets_needs_a_definition_when_the_document_has_several_networks():
+    service = _workspace_service_with_subnets({"network": "main-network", "name": "app1-pe", "prefix_length": 27})
+
+    result = service.validate_workspace_subnets({"main-network": _two_network_document()})
+    assert _codes(result) == ["unregistered_virtual_network"]
+    assert "'virtual_network' must name one of ['vnet-data', 'vnet-main']" in result.messages()[0]
+
+
+def test_validate_workspace_subnets_rejects_an_unknown_definition():
+    service = _workspace_service_with_subnets(
+        {"network": "main-network", "virtual_network": "vnet-ghost", "name": "app1-pe", "prefix_length": 27}
+    )
+
+    result = service.validate_workspace_subnets({"main-network": _network_model()})
+    assert _codes(result) == ["unregistered_virtual_network"]
+    assert "vnet-ghost" in result.messages()[0]
+
+
+def test_validate_workspace_subnets_rejects_a_name_the_document_already_declares():
+    service = _workspace_service_with_subnets({"network": "main-network", "name": "app", "prefix_length": 27})
+
+    result = service.validate_workspace_subnets({"main-network": _network_model()})
+    assert _codes(result) == ["subnet_name_taken"]
+
+
+def test_validate_workspace_subnets_rejects_a_name_used_in_another_definition_of_the_document():
+    """The clash check is per document: `app` exists in vnet-main, and a resource names a subnet by document
+    and subnet name only, so an `app` in vnet-data would make `{network: main-network, subnet: app}` ambiguous."""
+    service = _workspace_service_with_subnets(
+        {"network": "main-network", "virtual_network": "vnet-data", "name": "app", "prefix_length": 24}
+    )
+
+    result = service.validate_workspace_subnets({"main-network": _two_network_document()})
+    assert _codes(result) == ["subnet_name_taken"]
+    assert "already declared by network 'vnet-main'" in result.messages()[0]
+
+
+def test_validate_workspace_subnets_rejects_a_size_that_cannot_fit_a_literal_range():
+    service = _workspace_service_with_subnets({"network": "main-network", "name": "app1-pe", "prefix_length": 15})
+
+    result = service.validate_workspace_subnets({"main-network": _network_model()})
+    assert _codes(result) == ["subnet_does_not_fit"]
+
+
+def test_validate_workspace_subnets_skips_the_size_check_for_a_token_range():
+    service = _workspace_service_with_subnets({"network": "main-network", "name": "app1-pe", "prefix_length": 8})
+    network = _network_model(networks=[{"name": "vnet-main", "address_space": ["${var:vnet_space}"]}])
+
+    result = service.validate_workspace_subnets({"main-network": network})
+    assert result.ok
+
+
+def _ipam_only_network_model() -> NetworkModel:
+    """vnet-spoke asks its IPAM for a /22 (1024 addresses) and declares a /23 of its own."""
+    return _network_model(
+        networks=[
+            {
+                "name": "vnet-spoke",
+                "ipam": {"type": "azure-avnm", "prefix_length": 22},
+                "subnets": [{"name": "aks", "prefix_length": 23}],
+            }
+        ]
+    )
+
+
+def test_validate_workspace_subnets_rejects_a_size_larger_than_the_ipam_block():
+    service = _workspace_service_with_subnets({"network": "main-network", "name": "app1-pe", "prefix_length": 21})
+
+    result = service.validate_workspace_subnets({"main-network": _ipam_only_network_model()})
+    assert _codes(result) == ["subnet_does_not_fit"]
+    assert "is larger than the /22 block it asks the IPAM for" in result.messages()[0]
+
+
+def test_validate_workspace_subnets_rejects_subnets_the_ipam_block_cannot_hold():
+    """The document's /23 (512) plus the workspace's /23 and /24 (768) need 1280 of the /22's 1024."""
+    service = _workspace_service_with_subnets(
+        {"network": "main-network", "name": "app1-a", "prefix_length": 23},
+        {"network": "main-network", "name": "app1-b", "prefix_length": 24},
+    )
+
+    result = service.validate_workspace_subnets({"main-network": _ipam_only_network_model()})
+    assert _codes(result) == ["subnet_capacity_exceeded"]
+    assert "needs 1280 addresses, but the /22 block it asks the IPAM for holds only 1024" in result.messages()[0]
+
+
+def test_validate_workspace_subnets_rejects_subnets_the_address_space_cannot_hold():
+    """vnet-main is a /16 (65536) with a fixed /24 (256): two /17s (65536) no longer fit."""
+    service = _workspace_service_with_subnets(
+        {"network": "main-network", "name": "app1-a", "prefix_length": 17},
+        {"network": "main-network", "name": "app1-b", "prefix_length": 17},
+    )
+
+    result = service.validate_workspace_subnets({"main-network": _network_model()})
+    assert _codes(result) == ["subnet_capacity_exceeded"]
+    assert "needs 65792 addresses" in result.messages()[0]
+    assert "holds only 65536" in result.messages()[0]
+
+
+def test_validate_workspace_subnets_accepts_subnets_that_fit_beside_the_documents_own():
+    service = _workspace_service_with_subnets(
+        {"network": "main-network", "name": "app1-a", "prefix_length": 17},
+        {"network": "main-network", "name": "app1-b", "prefix_length": 18},
+    )
+
+    result = service.validate_workspace_subnets({"main-network": _network_model()})
+    assert result.ok
+
+
+def test_validate_workspace_subnets_counts_capacity_per_network_definition():
+    """A /17 in each of two /16 networks: neither network is over capacity."""
+    service = _workspace_service_with_subnets(
+        {"network": "main-network", "virtual_network": "vnet-main", "name": "app1-a", "prefix_length": 17},
+        {"network": "main-network", "virtual_network": "vnet-data", "name": "app1-b", "prefix_length": 16},
+    )
+
+    result = service.validate_workspace_subnets({"main-network": _two_network_document()})
+    assert result.ok
+
+
+def test_validate_workspace_subnets_skips_an_unresolved_network_reference():
+    service = _workspace_service_with_subnets({"network": "main-network", "name": "app1-pe", "prefix_length": 27})
+
+    result = service.validate_workspace_subnets({})
+    assert result.ok
+    assert result.messages() == []
+
+
 # ---------------------------------------------------------------------------
 # validate_allowed_key_value_store() — docs/work/cross-run-step-output-
 # delivery.md's Implementation Plan step 1 ('Governance'). Takes the

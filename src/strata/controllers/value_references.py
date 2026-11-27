@@ -74,6 +74,21 @@ def _artifact_image_field(kind: PlatformKind, path: list[str]) -> str | None:
     return None
 
 
+def _is_subnet_cidr(kind: PlatformKind, path: list[str]) -> bool:
+    """Whether `path` is a network subnet's `cidr`: `spec.networks.<network>.subnets.<subnet>.cidr`.
+
+    A subnet with `prefix_length` has `cidr: null` — its address is chosen at deploy
+    (docs/design/subnet-addressing.md, D7 #10), so the generic "not a single value" message would mislead.
+    """
+    return (
+        kind is PlatformKind.NETWORK
+        and len(path) == 6
+        and path[:2] == ["spec", "networks"]
+        and path[3] == "subnets"
+        and path[5] == "cidr"
+    )
+
+
 def _pin_category(kind: PlatformKind, path: list[str]) -> str | None:
     """The `kind: version` pin category that overrides the field `path` names on a `kind` document, if any.
 
@@ -145,7 +160,8 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
        (`_pin_category()`), nor an artifact's `image_name`
        (`_artifact_image_field()`); both `value_reference_pinnable_field`.
     5. That leaf is a scalar — `str`/`int`/`float`/`bool`, never a
-       `dict`/`list`/`None` (`value_reference_not_scalar`).
+       `dict`/`list`/`None` (`value_reference_not_scalar`; an unset field
+       says so, and a sized subnet's `cidr` gets `value_reference_no_address`).
     6. If the leaf is a string, it contains no `${...}` token of any kind
        — var/secret/feature/output/value, escaped `$${...}` spans don't
        count since they resolve to a fixed literal
@@ -260,6 +276,25 @@ def resolve_document_value_references(index: DocumentIndex) -> tuple[dict[str, s
                         source=str(entry.source),
                         location=location,
                         code="value_reference_pinnable_field",
+                    )
+                    continue
+                if resolved is None and _is_subnet_cidr(target_kind, path_segments):
+                    diagnostics.error(
+                        f"'${{value:{full_key}}}' reads the address of subnet '{path_segments[-2]}', which has a "
+                        "prefix_length instead of a cidr: its address is chosen at deploy, so it has none in the "
+                        "configuration. Reference the subnet in your provisioner code instead.",
+                        source=str(entry.source),
+                        location=location,
+                        code="value_reference_no_address",
+                    )
+                    continue
+                if resolved is None:
+                    diagnostics.error(
+                        f"'${{value:{full_key}}}' reads a field that is not set in that document, so there is "
+                        "no value to insert.",
+                        source=str(entry.source),
+                        location=location,
+                        code="value_reference_not_scalar",
                     )
                     continue
                 if not isinstance(resolved, (str, int, float, bool)):

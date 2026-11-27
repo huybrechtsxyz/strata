@@ -3,7 +3,7 @@
 
 from strata.models.configuration_model import ConfigurationModel, ConfigurationSecurityModel
 from strata.models.deployment_model import DeploymentModel
-from strata.models.network_model import NetworkModel
+from strata.models.network_model import NetworkDefinitionModel, NetworkModel
 from strata.models.topology_config_model import TopologyConfigModel
 from strata.models.workspace_model import WorkspaceModel, claimed_names, effective_resources_and_namespaces
 from strata.services.base_service import BaseService
@@ -246,12 +246,89 @@ class WorkspaceService(BaseService[WorkspaceModel]):
                 continue  # unresolved reference — validate_references already reported it
 
             subnet_names = {subnet.name for definition in network_model.spec.networks for subnet in definition.subnets}
+            # This workspace's own subnets on that document count too (docs/design/subnet-addressing.md, D3).
+            subnet_names |= {s.name for s in self.model.spec.subnets or [] if s.network == resource.subnet.network}
             if resource.subnet.subnet not in subnet_names:
                 diagnostics.error(
                     f"Resource '{resource.name}' subnet '{resource.subnet.subnet}' not found in network "
                     f"'{resource.subnet.network}'. Available subnets: {sorted(subnet_names)}",
                     location="spec.resources",
                     code="unregistered_subnet",
+                )
+
+        return diagnostics
+
+    def validate_workspace_subnets(self, network_models: dict[str, NetworkModel]) -> Diagnostics:
+        """Cross-check each `spec.subnets[]` entry against its loaded Network document.
+
+        The Phase 2 half of `WorkspaceSpecModel.validate_workspace_subnets` (docs/design/subnet-addressing.md, D3/D7 #4 and #7): the network definition the subnet goes into exists, its name does
+        not clash with a subnet the document already declares there, and its size can fit one of that
+        definition's ranges when they are literal. Then, per network (D7 #5): the document's subnets plus the
+        workspace's must not need more addresses than its literal ranges hold.
+
+        Args:
+            network_models: Already-loaded `NetworkModel` documents, keyed by `meta.name`. A name missing from
+                this dict (an unresolved reference) is skipped — `validate_references` already reported it.
+        """
+        diagnostics = Diagnostics()
+        if self.model is None:
+            return diagnostics
+
+        # (document, definition name) -> (definition, the sizes this workspace adds to it)
+        added: dict[tuple[str, str], tuple[NetworkDefinitionModel, list[int]]] = {}
+        for subnet in self.model.spec.subnets or []:
+            network_model = network_models.get(subnet.network)
+            if network_model is None:
+                continue  # unresolved reference — validate_references already reported it
+
+            definition = network_model.target_definition(subnet.virtual_network)
+            if definition is None:
+                names = sorted(net.name for net in network_model.spec.networks)
+                diagnostics.error(
+                    f"Subnet '{subnet.name}': network document '{subnet.network}' declares {len(names)} networks, "
+                    f"so 'virtual_network' must name one of {names}"
+                    if subnet.virtual_network is None
+                    else f"Subnet '{subnet.name}': network '{subnet.virtual_network}' not found in network document "
+                    f"'{subnet.network}'. Available networks: {names}",
+                    location="spec.subnets",
+                    code="unregistered_virtual_network",
+                )
+                continue
+
+            # Per document, not per network: a resource names a subnet by document and subnet name only, so
+            # a name in any of the document's networks would make that reference ambiguous.
+            owner = next(
+                (net.name for net in network_model.spec.networks if subnet.name in {s.name for s in net.subnets}), None
+            )
+            if owner is not None:
+                diagnostics.error(
+                    f"Subnet '{subnet.name}' is already declared by network '{owner}' in network "
+                    f"document '{subnet.network}'; give the workspace subnet another name",
+                    location="spec.subnets",
+                    code="subnet_name_taken",
+                )
+
+            if definition.prefix_length_fits(subnet.prefix_length) is False:
+                diagnostics.error(
+                    f"Subnet '{subnet.name}' (/{subnet.prefix_length}) in network '{definition.name}' "
+                    f"{definition.misfit_text()}",
+                    location="spec.subnets",
+                    code="subnet_does_not_fit",
+                )
+                continue
+
+            added.setdefault((subnet.network, definition.name), (definition, []))[1].append(subnet.prefix_length)
+
+        for (document, name), (definition, lengths) in added.items():
+            shortfall = definition.address_shortfall(lengths)
+            if shortfall is not None:
+                needed, available = shortfall
+                diagnostics.error(
+                    f"With this workspace's subnets, network '{name}' in network document '{document}' needs "
+                    f"{needed} addresses, but {definition.space_description()} holds only {available}. "
+                    "Use smaller subnets, or ask the network owner for more space.",
+                    location="spec.subnets",
+                    code="subnet_capacity_exceeded",
                 )
 
         return diagnostics

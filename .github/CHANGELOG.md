@@ -8,6 +8,19 @@ This project adheres to [Keep a Changelog](https://keepachangelog.com/) and foll
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-11-26
+
+### Added
+
+- **How-to: [Declare subnets by size and create them where they belong](../docs/how-to/declare-subnets.md).** Core subnets in the shared network document, workload subnets in each workspace, reading both in Terraform, choosing addresses with or without an IPAM, and growing the address space. The design is in [docs/design/subnet-addressing.md](../docs/design/subnet-addressing.md), and [ADR-0007](../docs/decisions/0007-network-model-design-decisions.md) decision 7 records it.
+- **Network: a subnet can give a size instead of an address.** A subnet now takes `prefix_length` (for example `25` for a /25) instead of `cidr`, when your provisioner code or an IPAM chooses the address at deploy; strata passes the size on and never computes the address. Give exactly one of the two. When the address space is literal, strata rejects a size that cannot fit any range; without one, a size larger than the `ipam.prefix_length` block.
+- **Network: `ipam` says which IPAM allocates a network's addresses** (`type`, and optionally `pool`, `prefix_length`, `configuration`). Strata does not call the IPAM; it passes these settings on to your provisioner code. A network gives `address_space`, `ipam`, or both, and may now have no subnets of its own.
+- **Workspace: `subnets` adds subnets to a network the workspace uses**, each with a `name` and a `prefix_length` (and `virtual_network` when the network document declares several networks), without changing the shared network document. A resource can be placed on such a subnet. Validation catches a network that isn't in `networks`, an unknown `virtual_network` (`unregistered_virtual_network`), a name the network document already uses in any of its networks (`subnet_name_taken`), and a size that cannot fit a literal range or the IPAM block (`subnet_does_not_fit`).
+- **Terraform/OpenTofu: `strata.networks` carries the new network fields.** Every network gets `ipam` (`type`, `pool`, `prefix_length`, `configuration`; `type` is null when the network names no IPAM — never a bare null, which Terraform cannot convert beside another network's object). Every subnet now always has `cidr`, `prefix_length` and `declared_by` (null when unused): `declared_by` is `network` for the network document's own subnets and `workspace` for the workspace's `subnets`, which are merged into their network so each Terraform can create only its own.
+- **Network: capacity check.** Validation rejects subnets that together need more addresses than the network's literal address space holds (or, without one, the `ipam.prefix_length` block), for the network document's own subnets and again with a workspace's `subnets` added (`subnet_capacity_exceeded`). It is a "certainly will not fit" check: the provisioner code or IPAM still decides at deploy whether a free block is left.
+- **Reference Terraform module for sized subnets without an IPAM: [examples/terraform/azure-subnets](../examples/terraform/azure-subnets/main.tf).** Copy it into the network deployment and each workload: it reads the existing Azure vnet, keeps every existing subnet's address, gives each new subnet the first free block of its size (largest first, ranges in order), never moves a live subnet (`ignore_changes`), and fails clearly when the network is full. IPv4, up to 10 new subnets per network per apply, Terraform 1.6+ and azurerm 4+.
+- **`${value:}` on a sized subnet's `cidr` says why it has no address** (`value_reference_no_address`): the address is chosen at deploy, so reference the subnet in your provisioner code instead.
+
 ## [2.10.1] - 2026-11-25
 
 ### Added
@@ -1031,7 +1044,8 @@ v2 is a ground-up rebuild of strata, not an upgrade of v1: documents use `apiVer
 - Helm modules do not receive the declared service image in the chart values, so `image_tag_policy` judges the declared image of a Helm module but cannot see an image that only the chart knows.
 - Deployment stage `gates` are not available yet.
 
-[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.10.1...HEAD
+[Unreleased]: https://github.com/huybrechtsxyz/strata/compare/v2.11.0...HEAD
+[2.11.0]: https://github.com/huybrechtsxyz/strata/compare/v2.10.1...v2.11.0
 [2.10.1]: https://github.com/huybrechtsxyz/strata/compare/v2.10.0...v2.10.1
 [2.10.0]: https://github.com/huybrechtsxyz/strata/compare/v2.9.0...v2.10.0
 [2.9.0]: https://github.com/huybrechtsxyz/strata/compare/v2.8.0...v2.9.0

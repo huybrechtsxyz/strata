@@ -91,11 +91,16 @@ consumer need shows up.
   current `FirewallRuleModel` shape (`from`/`to` as Value-bound strings).
 - [cross-document-value-references.md](cross-document-value-references.md) —
   the `${value:kind.name.path}` mechanism this design consumes.
-- `subnet-cidr-derivation.md` (work doc) — the
-  sibling Network doc this one was originally spun out of; its own
-  `strata network allocate` direction was separately cancelled, which
-  turned out not to matter here (the positional-addressing risk this
-  design fixes was already real without it).
+- [subnet-addressing.md](subnet-addressing.md) (was the
+  `subnet-cidr-derivation.md` work doc) — the sibling Network doc this one
+  was originally spun out of; its own `strata network allocate` direction
+  was separately cancelled, which turned out not to matter here (the
+  positional-addressing risk this design fixes was already real without
+  it). **Since 2.11.0 a subnet can give `prefix_length` instead of `cidr`**:
+  its address is chosen at deploy, so `${value:...subnets.<x>.cidr}` has
+  nothing to read and fails with `value_reference_no_address`. A firewall
+  rule for such a subnet must take the address from the provisioner code
+  (the subnet resource's real address), not from `${value:}`.
 - [solution-loading-and-phase2-validation.md](solution-loading-and-phase2-validation.md) —
   a related but distinct concern: the Workspace subnet cross-check
   resolves `WorkspaceResourceSubnetModel.subnet` by `.name` directly on
